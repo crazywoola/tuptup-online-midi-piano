@@ -59,6 +59,9 @@ export default function Home() {
   const [octave, setOctave] = useState(4);
   const [sustain, setSustainState] = useState(false);
   const [copyStatus, setCopyStatus] = useState("复制 Chrome 链接");
+  const [midiEventCount, setMidiEventCount] = useState(0);
+  const [rawMidi, setRawMidi] = useState("— — —");
+  const [midiSource, setMidiSource] = useState("等待 MIDI 数据");
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const masterGainRef = useRef<GainNode | null>(null);
@@ -67,7 +70,7 @@ export default function Home() {
   const sustainedNotesRef = useRef(new Set<number>());
   const sustainRef = useRef(false);
   const midiAccessRef = useRef<MIDIAccess | null>(null);
-  const midiInputRef = useRef<MIDIInput | null>(null);
+  const midiInputsRef = useRef<Map<string, MIDIInput>>(new Map());
   const volumeRef = useRef(volume);
   const keyboardScrollRef = useRef<HTMLDivElement | null>(null);
   const initialScrollDoneRef = useRef(false);
@@ -186,8 +189,14 @@ export default function Home() {
 
   const handleMidiMessage = useCallback(
     (event: MIDIMessageEvent) => {
-      const [status = 0, note = 0, value = 0] = Array.from(event.data ?? []);
+      const data = Array.from(event.data ?? []);
+      const [status = 0, note = 0, value = 0] = data;
       const command = status & 0xf0;
+      const input = (event.currentTarget || event.target) as MIDIInput | null;
+
+      setMidiEventCount((count) => count + 1);
+      setRawMidi(data.map((byte) => byte.toString(16).toUpperCase().padStart(2, "0")).join(" "));
+      setMidiSource(input?.name || "MIDI INPUT");
       if (command === 0x90 && value > 0) playNote(note, value);
       if (command === 0x80 || (command === 0x90 && value === 0)) stopNote(note);
       if (command === 0xb0 && note === 64) setSustain(value >= 64);
@@ -195,33 +204,48 @@ export default function Home() {
     [playNote, setSustain, stopNote],
   );
 
-  const attachPreferredInput = useCallback(
+  const attachAllInputs = useCallback(
     async (access: MIDIAccess) => {
       const inputs = Array.from(access.inputs.values());
-      const preferred = inputs.find(
-        (input) =>
-          input.name?.toLowerCase().includes("tuptup ts01") ||
-          input.manufacturer?.toLowerCase().includes("soundwalker"),
-      );
-      const input = preferred ?? inputs[0];
 
-      if (!input) {
-        midiInputRef.current = null;
+      if (inputs.length === 0) {
+        midiInputsRef.current.forEach((input) => (input.onmidimessage = null));
+        midiInputsRef.current.clear();
         setConnection("missing");
         setMessage("未发现 MIDI 输入，请检查 USB 连接");
         return;
       }
 
-      if (midiInputRef.current && midiInputRef.current !== input) {
-        midiInputRef.current.onmidimessage = null;
-      }
-      await input.open();
-      input.onmidimessage = handleMidiMessage;
-      midiInputRef.current = input;
-      setDeviceName(input.name || TARGET_DEVICE);
-      setDeviceDetail(`${input.manufacturer || "SoundWalker"} · ${input.connection === "open" ? "MIDI 已打开" : "USB MIDI"}`);
+      midiInputsRef.current.forEach((input) => (input.onmidimessage = null));
+      const openedInputs = (
+        await Promise.all(
+          inputs.map(async (input) => {
+            try {
+              await input.open();
+              input.onmidimessage = handleMidiMessage;
+              return input;
+            } catch {
+              return null;
+            }
+          }),
+        )
+      ).filter((input): input is MIDIInput => input !== null);
+
+      if (openedInputs.length === 0) throw new Error("No MIDI input port could be opened");
+
+      midiInputsRef.current = new Map(openedInputs.map((input) => [input.id, input]));
+      const preferred = openedInputs.find(
+        (input) =>
+          input.name?.toLowerCase().includes("tuptup ts01") ||
+          input.manufacturer?.toLowerCase().includes("soundwalker"),
+      );
+      const primary = preferred ?? openedInputs[0];
+      const inputNames = Array.from(new Set(openedInputs.map((input) => input.name || "MIDI INPUT")));
+
+      setDeviceName(primary.name || TARGET_DEVICE);
+      setDeviceDetail(`${openedInputs.length} 个 MIDI 输入端口已打开`);
       setConnection("connected");
-      setMessage(preferred ? "已连接，请按下实体 MIDI 键盘测试灯光" : `已连接 ${input.name || "MIDI 键盘"}`);
+      setMessage(`正在监听：${inputNames.join(" + ")}；请按下实体琴键`);
       ensureAudio();
     },
     [ensureAudio, handleMidiMessage],
@@ -239,9 +263,9 @@ export default function Home() {
     try {
       const access = await navigator.requestMIDIAccess({ sysex: false });
       midiAccessRef.current = access;
-      await attachPreferredInput(access);
+      await attachAllInputs(access);
       access.onstatechange = () => {
-        void attachPreferredInput(access).catch(() => {
+        void attachAllInputs(access).catch(() => {
           setConnection("missing");
           setMessage("MIDI 键盘已断开，请检查 USB 连接");
         });
@@ -252,7 +276,7 @@ export default function Home() {
       setConnection(wasBlocked ? "blocked" : "error");
       setMessage(wasBlocked ? "当前浏览器拒绝了 MIDI 设备权限" : "MIDI 连接失败，请重新插拔键盘后再试");
     }
-  }, [attachPreferredInput]);
+  }, [attachAllInputs]);
 
   const copyChromeLink = useCallback(async () => {
     try {
@@ -327,7 +351,8 @@ export default function Home() {
 
   useEffect(
     () => () => {
-      midiInputRef.current && (midiInputRef.current.onmidimessage = null);
+      midiInputsRef.current.forEach((input) => (input.onmidimessage = null));
+      midiInputsRef.current.clear();
       voicesRef.current.forEach((_, note) => releaseVoice(note, true));
       void audioContextRef.current?.close();
     },
@@ -427,7 +452,11 @@ export default function Home() {
         <div className="feedback-strip" aria-live="polite">
           <div className="live-input">
             <span><i /> LIVE INPUT</span>
-            <strong>{activeNotes.size > 0 && lastNote !== null ? `${noteName(lastNote)} 正在演奏` : "按下 MIDI 键盘，灯光会跟随音符"}</strong>
+            <strong>
+              {midiEventCount > 0
+                ? `${midiSource} · ${rawMidi}${activeNotes.size > 0 && lastNote !== null ? ` · ${noteName(lastNote)}` : ""}`
+                : "按下 MIDI 键盘，灯光会跟随音符"}
+            </strong>
           </div>
           <div className="note-lights" aria-label="十二音视觉反馈">
             {Array.from({ length: 12 }, (_, pitch) => (
@@ -439,8 +468,8 @@ export default function Home() {
             ))}
           </div>
           <div className="energy-readout">
-            <span>ACTIVE KEYS</span>
-            <b>{String(activeNotes.size).padStart(2, "0")}</b>
+            <span>MIDI RX</span>
+            <b>{String(midiEventCount).padStart(3, "0").slice(-3)}</b>
           </div>
         </div>
 
