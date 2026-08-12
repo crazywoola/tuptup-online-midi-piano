@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const TARGET_DEVICE = "TupTup TS01-MIDI";
-const LOWEST_NOTE = 48;
-const HIGHEST_NOTE = 83;
+const LOWEST_NOTE = 36;
+const HIGHEST_NOTE = 96;
 
 const KEYBOARD_MAP: Record<string, number> = {
   a: 0,
@@ -67,6 +67,8 @@ export default function Home() {
   const midiAccessRef = useRef<MIDIAccess | null>(null);
   const midiInputRef = useRef<MIDIInput | null>(null);
   const volumeRef = useRef(volume);
+  const keyboardScrollRef = useRef<HTMLDivElement | null>(null);
+  const initialScrollDoneRef = useRef(false);
 
   const allNotes = useMemo(
     () => Array.from({ length: HIGHEST_NOTE - LOWEST_NOTE + 1 }, (_, index) => LOWEST_NOTE + index),
@@ -252,6 +254,26 @@ export default function Home() {
   }, [volume]);
 
   useEffect(() => {
+    const scrollArea = keyboardScrollRef.current;
+    const focusNote = lastNote ?? 60;
+    const key = scrollArea?.querySelector<HTMLElement>(`[data-note="${focusNote}"]`);
+    if (!scrollArea || !key) return;
+
+    const keyCenter = key.offsetLeft + key.offsetWidth / 2;
+    const visibleLeft = scrollArea.scrollLeft;
+    const visibleRight = visibleLeft + scrollArea.clientWidth;
+    const isOutsideView = keyCenter < visibleLeft + 50 || keyCenter > visibleRight - 50;
+
+    if (!initialScrollDoneRef.current || isOutsideView) {
+      scrollArea.scrollTo({
+        left: Math.max(0, keyCenter - scrollArea.clientWidth / 2),
+        behavior: initialScrollDoneRef.current ? "smooth" : "instant",
+      });
+      initialScrollDoneRef.current = true;
+    }
+  }, [lastNote]);
+
+  useEffect(() => {
     const down = (event: KeyboardEvent) => {
       if (event.repeat) return;
       if ((event.target as HTMLElement)?.tagName === "INPUT") return;
@@ -345,7 +367,11 @@ export default function Home() {
         </aside>
       </section>
 
-      <section className="instrument" aria-label="在线钢琴">
+      <section
+        className={`instrument ${activeNotes.size > 0 ? "playing" : ""}`}
+        style={{ "--performance-energy": velocity / 127 } as React.CSSProperties}
+        aria-label="在线钢琴"
+      >
         <div className="instrument-top">
           <div className="readout">
             <span className="readout-label">NOTE</span>
@@ -370,14 +396,35 @@ export default function Home() {
           <div className={`sustain-indicator ${sustain ? "active" : ""}`}><span /> SUSTAIN</div>
         </div>
 
-        <div className="keyboard-scroll">
-          <div className="keyboard" role="group" aria-label="钢琴键盘，从 C3 到 B5">
+        <div className="feedback-strip" aria-live="polite">
+          <div className="live-input">
+            <span><i /> LIVE INPUT</span>
+            <strong>{activeNotes.size > 0 && lastNote !== null ? `${noteName(lastNote)} 正在演奏` : "按下 MIDI 键盘，灯光会跟随音符"}</strong>
+          </div>
+          <div className="note-lights" aria-label="十二音视觉反馈">
+            {Array.from({ length: 12 }, (_, pitch) => (
+              <i
+                className={Array.from(activeNotes).some((note) => note % 12 === pitch) ? "active" : ""}
+                key={pitch}
+                style={{ "--light-index": pitch } as React.CSSProperties}
+              />
+            ))}
+          </div>
+          <div className="energy-readout">
+            <span>ACTIVE KEYS</span>
+            <b>{String(activeNotes.size).padStart(2, "0")}</b>
+          </div>
+        </div>
+
+        <div className="keyboard-scroll" ref={keyboardScrollRef}>
+          <div className="keyboard" role="group" aria-label="61 键钢琴键盘，从 C2 到 C7">
             <div className="white-keys">
               {whiteNotes.map((note) => {
                 const hint = KEY_HINTS[note - baseComputerNote];
                 return (
                   <button
                     className={`piano-key white ${activeNotes.has(note) ? "active" : ""}`}
+                    data-note={note}
                     key={note}
                     onPointerDown={pointerDown(note)}
                     onPointerUp={pointerUp(note)}
@@ -397,6 +444,7 @@ export default function Home() {
                 return (
                   <button
                     className={`piano-key black ${activeNotes.has(note) ? "active" : ""}`}
+                    data-note={note}
                     style={{ left: `${(precedingWhites / whiteNotes.length) * 100}%`, width: `${(100 / whiteNotes.length) * 0.62}%` }}
                     key={note}
                     onPointerDown={pointerDown(note)}
