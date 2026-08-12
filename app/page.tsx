@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const TARGET_DEVICE = "TupTup TS01-MIDI";
+const PUBLIC_SITE_URL = "https://tuptup-midi-piano.bananapink.chatgpt.site";
 const LOWEST_NOTE = 36;
 const HIGHEST_NOTE = 96;
 
@@ -26,7 +27,7 @@ const KEY_HINTS = Object.fromEntries(
   Object.entries(KEYBOARD_MAP).map(([key, offset]) => [offset, key.toUpperCase()]),
 );
 
-type ConnectionState = "idle" | "searching" | "connected" | "missing" | "error";
+type ConnectionState = "idle" | "searching" | "connected" | "missing" | "blocked" | "error";
 
 type Voice = {
   oscillators: OscillatorNode[];
@@ -57,6 +58,7 @@ export default function Home() {
   const [volume, setVolume] = useState(72);
   const [octave, setOctave] = useState(4);
   const [sustain, setSustainState] = useState(false);
+  const [copyStatus, setCopyStatus] = useState("复制 Chrome 链接");
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const masterGainRef = useRef<GainNode | null>(null);
@@ -194,7 +196,7 @@ export default function Home() {
   );
 
   const attachPreferredInput = useCallback(
-    (access: MIDIAccess) => {
+    async (access: MIDIAccess) => {
       const inputs = Array.from(access.inputs.values());
       const preferred = inputs.find(
         (input) =>
@@ -213,12 +215,13 @@ export default function Home() {
       if (midiInputRef.current && midiInputRef.current !== input) {
         midiInputRef.current.onmidimessage = null;
       }
+      await input.open();
       input.onmidimessage = handleMidiMessage;
       midiInputRef.current = input;
       setDeviceName(input.name || TARGET_DEVICE);
       setDeviceDetail(`${input.manufacturer || "SoundWalker"} · ${input.connection === "open" ? "MIDI 已打开" : "USB MIDI"}`);
       setConnection("connected");
-      setMessage(preferred ? "已连接，开始演奏吧" : `已连接 ${input.name || "MIDI 键盘"}`);
+      setMessage(preferred ? "已连接，请按下实体 MIDI 键盘测试灯光" : `已连接 ${input.name || "MIDI 键盘"}`);
       ensureAudio();
     },
     [ensureAudio, handleMidiMessage],
@@ -227,7 +230,7 @@ export default function Home() {
   const connectMidi = useCallback(async () => {
     if (!("requestMIDIAccess" in navigator)) {
       setConnection("error");
-      setMessage("此浏览器不支持 Web MIDI，请使用最新版 Chrome 或 Edge");
+      setMessage("当前浏览器不支持 USB MIDI");
       return;
     }
 
@@ -236,13 +239,30 @@ export default function Home() {
     try {
       const access = await navigator.requestMIDIAccess({ sysex: false });
       midiAccessRef.current = access;
-      attachPreferredInput(access);
-      access.onstatechange = () => attachPreferredInput(access);
-    } catch {
-      setConnection("error");
-      setMessage("未获得 MIDI 权限，请在浏览器中允许设备访问");
+      await attachPreferredInput(access);
+      access.onstatechange = () => {
+        void attachPreferredInput(access).catch(() => {
+          setConnection("missing");
+          setMessage("MIDI 键盘已断开，请检查 USB 连接");
+        });
+      };
+    } catch (error) {
+      const errorName = error instanceof DOMException ? error.name : "";
+      const wasBlocked = errorName === "NotAllowedError" || errorName === "SecurityError";
+      setConnection(wasBlocked ? "blocked" : "error");
+      setMessage(wasBlocked ? "当前浏览器拒绝了 MIDI 设备权限" : "MIDI 连接失败，请重新插拔键盘后再试");
     }
   }, [attachPreferredInput]);
+
+  const copyChromeLink = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(PUBLIC_SITE_URL);
+      setCopyStatus("已复制，粘贴到 Chrome");
+      window.setTimeout(() => setCopyStatus("复制 Chrome 链接"), 2600);
+    } catch {
+      setCopyStatus("请手动复制下方网址");
+    }
+  }, []);
 
   useEffect(() => {
     volumeRef.current = volume;
@@ -364,6 +384,14 @@ export default function Home() {
             <span aria-hidden="true">↗</span>
           </button>
           <p className="connection-message">{message}</p>
+          {(connection === "blocked" || connection === "error") && (
+            <div className="browser-help" role="alert">
+              <strong>请用桌面版 Chrome 或 Edge 打开</strong>
+              <p>Codex 内置预览无法读取 USB MIDI。复制正式网址，在 Chrome 地址栏中打开，再点击连接并允许 MIDI 设备访问。</p>
+              <button onClick={copyChromeLink}>{copyStatus}</button>
+              <code>{PUBLIC_SITE_URL.replace("https://", "")}</code>
+            </div>
+          )}
         </aside>
       </section>
 
@@ -460,7 +488,7 @@ export default function Home() {
           </div>
         </div>
         <div className="instrument-foot">
-          <p><span>电脑键盘</span> A–K 演奏 · 空格键延音</p>
+          <p><span>主要输入</span> TupTup USB MIDI · 电脑键盘仅作备用</p>
           <p><span className="pulse" /> LOW-LATENCY AUDIO ENGINE</p>
         </div>
       </section>
