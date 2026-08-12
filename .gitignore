@@ -38,3 +38,7 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+*.tsbuildinfo
+
+# Local Sites deployment binding (copy from hosting.example.json)
+/.openai/hosting.json

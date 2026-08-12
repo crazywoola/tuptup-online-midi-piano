@@ -1,0 +1,53 @@
+name: Bug report
+description: Report a reproducible problem with the app
+title: "[Bug]: "
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping improve TupTup Piano. Remove serial numbers and private data from logs.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the actual behavior and what you expected instead.
+    validations:
+      required: true
+  - type: input
+    id: controller
+    attributes:
+      label: MIDI controller and visible input names
+      placeholder: TupTup TS01-MIDI; SAM5704
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and operating system
+      placeholder: Chrome 000 on macOS 00.0
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Connect the controller
+        2. Allow MIDI access
+        3. Press C4
+    validations:
+      required: true
+  - type: textarea
+    id: midi
+    attributes:
+      label: Sanitized MIDI monitor output
+      description: Include a few bytes such as `90 3C 40`; do not include serial numbers.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+        - label: I removed private data and device serial numbers.
+          required: true
