@@ -48,9 +48,10 @@ test("server-renders the standalone bilingual feature guide", async () => {
 });
 
 test("keeps the public metadata, licensed sources, and MIDI privacy promise", async () => {
-  const [layout, page, soundfont, readme, license, sampleCredits, erhuSample] = await Promise.all([
+  const [layout, page, midiInput, soundfont, readme, license, sampleCredits, erhuSample] = await Promise.all([
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/StudioWorkbench.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/midi-input.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/soundfont.ts", import.meta.url), "utf8"),
     readFile(new URL("../README.md", import.meta.url), "utf8"),
     readFile(new URL("../LICENSE", import.meta.url), "utf8"),
@@ -60,7 +61,8 @@ test("keeps the public metadata, licensed sources, and MIDI privacy promise", as
 
   assert.match(layout, /og-studio\.png/);
   assert.match(page, /requestMIDIAccess/);
-  assert.match(page, /inputs\.map/);
+  assert.match(page, /MidiInputController/);
+  assert.match(midiInput, /onstatechange/);
   assert.match(readme, /SAM5704/);
   assert.match(readme, /does not upload performance\s+data/i);
   assert.match(page, /guzheng/);
