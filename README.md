@@ -18,11 +18,13 @@ for the **TupTup TS01-MIDI** and its **SAM5704** sound-module input.
 - On-demand openly licensed samples for guzheng, erhu, pipa, dizi, yangqin, suona, sheng, and Chinese percussion
 - Tempo, metronome, loop transport, recording, playback, mute, solo, and arm
 - Piano-roll note drawing, selection, duplication, quantize, humanize, and deletion
+- Step input from the screen, computer, or MIDI keyboard directly into the piano roll
 - MIDI file import/export plus local project save and JSON project export
 - Live Note On/Off visualization across a stable 61-key shared piano
 - Sustain pedal support through MIDI CC 64
 - Mouse, touch, and computer-keyboard fallback controls
 - Responsive drawers, dialogs, keyboard shortcuts, and reduced-motion support
+- A bilingual feature guide at `/guide` with recording and editing walkthroughs
 
 ## Requirements
 

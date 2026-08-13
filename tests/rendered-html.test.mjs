@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-async function render() {
+async function render(path = "/") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
 
   return worker.fetch(
-    new Request("http://localhost/", { headers: { accept: "text/html" } }),
+    new Request(`http://localhost${path}`, { headers: { accept: "text/html" } }),
     {
       ASSETS: {
         fetch: async () => new Response("Not found", { status: 404 }),
@@ -32,6 +32,19 @@ test("server-renders the TupTup Studio workstation", async () => {
   assert.match(html, /TupTup TS01-MIDI/i);
   assert.doesNotMatch(html, /codex-preview/i);
   assert.doesNotMatch(html, /Your site is taking shape/i);
+});
+
+test("server-renders the standalone bilingual feature guide", async () => {
+  const response = await render("/guide");
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
+
+  const html = await response.text();
+  assert.match(html, /功能说明书/);
+  assert.match(html, /60 秒快速开始/);
+  assert.match(html, /步进输入/);
+  assert.match(html, /STEP INPUT/);
+  assert.match(html, /返回工作台/);
 });
 
 test("keeps the public metadata and MIDI privacy promise", async () => {
@@ -82,4 +95,23 @@ test("ships a persistent Chinese and English interface for every instrument", as
     assert.match(instrumentLine, /familyZh: ".+"/);
     assert.match(instrumentLine, /familyEn: ".+"/);
   }
+});
+
+test("provides stable roll input from the shared 61-key keyboard", async () => {
+  const [page, guide, styles] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/guide/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /const EDITOR_LOW = KEYBOARD_LOW/);
+  assert.match(page, /const EDITOR_HIGH = KEYBOARD_HIGH/);
+  assert.match(page, /stepInputRef\.current/);
+  assert.match(page, /id: uid\("step"\)/);
+  assert.match(page, /href="\/guide#roll-input"/);
+  assert.doesNotMatch(page, /className="compact-track-list"/);
+  assert.doesNotMatch(page, /className="library-tabs"/);
+  assert.match(guide, /How does the keyboard add notes to the Piano Roll/);
+  assert.match(guide, /A W S E D F T G Y H U J K/);
+  assert.match(styles, /grid-template-rows: repeat\(61, 1fr\)/);
 });

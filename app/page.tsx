@@ -7,8 +7,8 @@ const PUBLIC_SITE_URL = "https://tuptup-midi-studio.bananapink.chatgpt.site";
 const LOOP_STEPS = 32;
 const KEYBOARD_LOW = 36;
 const KEYBOARD_HIGH = 96;
-const EDITOR_LOW = 48;
-const EDITOR_HIGH = 83;
+const EDITOR_LOW = KEYBOARD_LOW;
+const EDITOR_HIGH = KEYBOARD_HIGH;
 const STORAGE_KEY = "tuptup-studio-project-v2";
 const LOCALE_STORAGE_KEY = "tuptup-studio-locale";
 const FLUID_SOUNDFONT_BASE = "https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM";
@@ -58,10 +58,10 @@ type Instrument = {
 const UI_TEXT = {
   zh: {
     project: "工程", projectName: "工程名称", projectActions: "工程操作", newProject: "新建", importMidi: "导入 MIDI", save: "保存", export: "导出", midiOnline: "MIDI 在线", connectDevice: "连接设备",
-    language: "语言", switchLanguage: "切换到 English", transport: "传输控制", openLibrary: "打开音色库", undo: "撤销", redo: "重做", metronome: "节拍器", tempo: "速度", countIn: "预备拍", returnStart: "回到开头", pause: "暂停", play: "播放", stopRecording: "停止录音", record: "录音", loop: "循环", master: "主音量", audioSettings: "音频设置", openMixer: "打开混音器",
-    browser: "浏览器", libraryTitle: "音色与音轨", tones: "音色", samples: "采样", effects: "效果", sampleLibraryManaged: "采样库可在工程包中管理", effectsInChannel: "效果器位于右侧通道条", studioCollection: "录音室", chineseCollection: "国风采样", credits: "来源", fullSuite: "整套", tracks: "音轨", ready: "已就绪", loading: "加载中", synthFallback: "合成回退", loadOnDemand: "按需加载",
+    language: "语言", switchLanguage: "切换到 English", guide: "说明书", openGuide: "打开功能说明书", transport: "传输控制", openLibrary: "打开音色库", undo: "撤销", redo: "重做", metronome: "节拍器", tempo: "速度", countIn: "预备拍", returnStart: "回到开头", pause: "暂停", play: "播放", stopRecording: "停止录音", record: "录音", loop: "循环", master: "主音量", audioSettings: "音频设置", openMixer: "打开混音器",
+    browser: "浏览器", libraryTitle: "音色库", tones: "音色", samples: "采样", effects: "效果", sampleLibraryManaged: "采样库可在工程包中管理", effectsInChannel: "效果器位于右侧通道条", studioCollection: "录音室", chineseCollection: "国风采样", credits: "来源", fullSuite: "整套", tracks: "音轨", ready: "已就绪", loading: "加载中", synthFallback: "合成回退", loadOnDemand: "按需加载",
     arrangement: "编曲", arrangementTitle: "编曲时间线", selectTool: "选择工具", pencilTool: "铅笔工具", splitTool: "切割工具", grid: "网格", gridAccuracy: "网格精度", add: "添加", addInstrumentTrack: "添加乐器音轨", notes: "音符",
-    pianoRoll: "钢琴卷帘", quantize: "量化 1/16", humanize: "人性化", duplicate: "重复", delete: "删除", rollHelp: "钢琴卷帘，点击空白处添加音符", stepLabel: (step: number) => `第 ${step} 格`,
+    pianoRoll: "钢琴卷帘", quantize: "量化 1/16", humanize: "人性化", duplicate: "重复", delete: "删除", rollHelp: "钢琴卷帘，点击空白处添加音符", stepLabel: (step: number) => `第 ${step} 格`, stepInput: "步进输入", stepInputHint: "开启后，按下方键盘、电脑 A–K 或 MIDI 键盘，音符会写入播放头并自动前进", liveRecordHint: "实时演奏请先待录音轨，再按 R 或录音键", learnMore: "查看完整说明",
     liveInput: "实时输入", note: "音符", velocity: "力度", octave: "八度", sustain: "延音", sampleReady: "采样就绪", playToLoad: "演奏以加载", computerKeys: "电脑键 A–K", keyboardLabel: "共享 61 键演奏键盘",
     channelStrip: "通道条", trackMixer: "音轨混音", selectedTrack: "已选音轨", trackName: "音轨名称", instrument: "乐器", inserts: "插入效果", compressor: "压缩器", eq: "三段均衡", on: "开", emptySlot: "空插槽", emptySlotReady: "空插槽已就绪", sends: "发送", reverb: "混响", delay: "延迟", pan: "声像", mute: "静音", solo: "独奏", arm: "待录", deleteTrack: "删除当前音轨",
     audioEngine: "音频引擎", polyphony: "复音数", autosave: "自动保存 · 本机", hardware: "硬件", midiDevice: "MIDI 设备", connected: "已连接", readyToConnect: "等待连接", searchingDevices: "正在搜索设备…", rescanMidi: "重新扫描 MIDI 输入", connectMidiKeyboard: "连接 MIDI 键盘", inputMode: "输入模式", allChannels: "全通道", latency: "延迟", interactive: "交互级", dataPrivacy: "数据隐私", localOnly: "仅限本机",
@@ -76,10 +76,10 @@ const UI_TEXT = {
   },
   en: {
     project: "Project", projectName: "Project name", projectActions: "Project actions", newProject: "New", importMidi: "Import MIDI", save: "Save", export: "Export", midiOnline: "MIDI Online", connectDevice: "Connect Device",
-    language: "Language", switchLanguage: "切换到中文", transport: "Transport controls", openLibrary: "Open sound library", undo: "Undo", redo: "Redo", metronome: "Metronome", tempo: "Tempo", countIn: "Count-in", returnStart: "Return to start", pause: "Pause", play: "Play", stopRecording: "Stop recording", record: "Record", loop: "Loop", master: "Master", audioSettings: "Audio settings", openMixer: "Open mixer",
-    browser: "Browser", libraryTitle: "Sounds & Tracks", tones: "Sounds", samples: "Samples", effects: "Effects", sampleLibraryManaged: "Manage the sample library in the project bundle", effectsInChannel: "Effects are available in the channel strip", studioCollection: "Studio", chineseCollection: "Chinese Samples", credits: "Credits", fullSuite: "Full Suite", tracks: "Tracks", ready: "Ready", loading: "Loading", synthFallback: "Synth Fallback", loadOnDemand: "Load on Demand",
+    language: "Language", switchLanguage: "切换到中文", guide: "Guide", openGuide: "Open the feature guide", transport: "Transport controls", openLibrary: "Open sound library", undo: "Undo", redo: "Redo", metronome: "Metronome", tempo: "Tempo", countIn: "Count-in", returnStart: "Return to start", pause: "Pause", play: "Play", stopRecording: "Stop recording", record: "Record", loop: "Loop", master: "Master", audioSettings: "Audio settings", openMixer: "Open mixer",
+    browser: "Browser", libraryTitle: "Sound Library", tones: "Sounds", samples: "Samples", effects: "Effects", sampleLibraryManaged: "Manage the sample library in the project bundle", effectsInChannel: "Effects are available in the channel strip", studioCollection: "Studio", chineseCollection: "Chinese Samples", credits: "Credits", fullSuite: "Full Suite", tracks: "Tracks", ready: "Ready", loading: "Loading", synthFallback: "Synth Fallback", loadOnDemand: "Load on Demand",
     arrangement: "Arrangement", arrangementTitle: "Arrangement Timeline", selectTool: "Select tool", pencilTool: "Pencil tool", splitTool: "Split tool", grid: "Grid", gridAccuracy: "Grid resolution", add: "Add", addInstrumentTrack: "Add Instrument Track", notes: "Notes",
-    pianoRoll: "Piano Roll", quantize: "Quantize 1/16", humanize: "Humanize", duplicate: "Duplicate", delete: "Delete", rollHelp: "Piano roll; click empty space to add a note", stepLabel: (step: number) => `step ${step}`,
+    pianoRoll: "Piano Roll", quantize: "Quantize 1/16", humanize: "Humanize", duplicate: "Duplicate", delete: "Delete", rollHelp: "Piano roll; click empty space to add a note", stepLabel: (step: number) => `step ${step}`, stepInput: "Step Input", stepInputHint: "Turn it on, then play the keyboard below, A–K, or a MIDI keyboard. Notes land at the playhead and advance automatically.", liveRecordHint: "For live performance, arm a track and press R or Record", learnMore: "View Full Guide",
     liveInput: "Live Input", note: "Note", velocity: "Velocity", octave: "Octave", sustain: "Sustain", sampleReady: "Sample Ready", playToLoad: "Play to Load", computerKeys: "Computer Keys A–K", keyboardLabel: "Shared 61-key performance keyboard",
     channelStrip: "Channel Strip", trackMixer: "Track Mixer", selectedTrack: "Selected Track", trackName: "Track name", instrument: "Instrument", inserts: "Inserts", compressor: "Compressor", eq: "3-Band EQ", on: "On", emptySlot: "Empty Slot", emptySlotReady: "Empty slot is ready", sends: "Sends", reverb: "Reverb", delay: "Delay", pan: "Pan", mute: "Mute", solo: "Solo", arm: "Arm", deleteTrack: "Delete Current Track",
     audioEngine: "Audio Engine", polyphony: "Polyphony", autosave: "Autosave · Local", hardware: "Hardware", midiDevice: "MIDI Device", connected: "Connected", readyToConnect: "Ready to Connect", searchingDevices: "Searching for devices…", rescanMidi: "Rescan MIDI Inputs", connectMidiKeyboard: "Connect MIDI Keyboard", inputMode: "Input Mode", allChannels: "Omni · All Channels", latency: "Latency", interactive: "Interactive", dataPrivacy: "Data Privacy", localOnly: "Local Only",
@@ -355,6 +355,7 @@ export default function Home() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
+  const [stepInput, setStepInput] = useState(false);
   const [countIn, setCountIn] = useState(false);
   const [connection, setConnection] = useState<ConnectionState>("idle");
   const [deviceName, setDeviceName] = useState(TARGET_DEVICE);
@@ -390,6 +391,8 @@ export default function Home() {
   const loopRef = useRef(looping);
   const currentStepRef = useRef(currentStep);
   const recordingRef = useRef(isRecording);
+  const stepInputRef = useRef(stepInput);
+  const stepChordStartRef = useRef<number | null>(null);
   const recordStartsRef = useRef(new Map<number, { step: number; trackId: string }>());
   const toastTimerRef = useRef<number | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -544,7 +547,10 @@ export default function Home() {
     if (!master) return "";
     if (source === "live") {
       const prior = liveVoiceKeysRef.current.get(note);
-      if (prior) stopVoice(prior, true);
+      if (prior) {
+        stopVoice(prior, true);
+        heldNotesRef.current.delete(note);
+      }
     }
     const preset = instrumentById(track.instrument);
     const key = `${source}-${trackId}-${note}-${context.currentTime}-${Math.random()}`;
@@ -553,6 +559,28 @@ export default function Home() {
     const panner = context.createStereoPanner();
     const strength = Math.max(.06, velocity / 127);
     const sampleAnchors = sampleAnchorsRef.current.get(preset.id);
+    const captureLivePerformance = () => {
+      const joinsHeldChord = heldNotesRef.current.size > 0;
+      liveVoiceKeysRef.current.set(note, key);
+      heldNotesRef.current.add(note);
+      setActiveNotes((notes) => new Set(notes).add(note));
+      setLastNote(note);
+      setLastVelocity(velocity);
+      if (recordingRef.current) {
+        recordStartsRef.current.set(note, { step: currentStepRef.current, trackId });
+        return;
+      }
+      if (!stepInputRef.current) return;
+      const start = joinsHeldChord && stepChordStartRef.current !== null ? stepChordStartRef.current : currentStepRef.current;
+      const event: NoteEvent = { id: uid("step"), note, start, duration: 1, velocity };
+      commitTracks((current) => current.map((item) => item.id === trackId ? { ...item, notes: [...item.notes, event] } : item));
+      setSelectedNoteId(event.id);
+      if (joinsHeldChord) return;
+      stepChordStartRef.current = start;
+      const nextStep = (start + 1) % LOOP_STEPS;
+      currentStepRef.current = nextStep;
+      setCurrentStep(nextStep);
+    };
 
     if (preset.sample && sampleAnchors?.length) {
       const anchor = sampleAnchors.reduce((best, item) => Math.abs(item.note - note) < Math.abs(best.note - note) ? item : best, sampleAnchors[0]);
@@ -573,12 +601,7 @@ export default function Home() {
       voicesRef.current.set(key, { sources: [sampleSource], gain, release: preset.release });
       setVoiceCount(voicesRef.current.size);
       if (source === "live") {
-        liveVoiceKeysRef.current.set(note, key);
-        heldNotesRef.current.add(note);
-        setActiveNotes((notes) => new Set(notes).add(note));
-        setLastNote(note);
-        setLastVelocity(velocity);
-        if (recordingRef.current) recordStartsRef.current.set(note, { step: currentStepRef.current, trackId });
+        captureLivePerformance();
       } else if (durationSeconds) {
         window.setTimeout(() => stopVoice(key), durationSeconds * 1000);
       }
@@ -611,20 +634,16 @@ export default function Home() {
     voicesRef.current.set(key, { sources: oscillators, gain, release: preset.release });
     setVoiceCount(voicesRef.current.size);
     if (source === "live") {
-      liveVoiceKeysRef.current.set(note, key);
-      heldNotesRef.current.add(note);
-      setActiveNotes((notes) => new Set(notes).add(note));
-      setLastNote(note);
-      setLastVelocity(velocity);
-      if (recordingRef.current) recordStartsRef.current.set(note, { step: currentStepRef.current, trackId });
+      captureLivePerformance();
     } else if (durationSeconds) {
       window.setTimeout(() => stopVoice(key), durationSeconds * 1000);
     }
     return key;
-  }, [ensureAudio, loadSampleInstrument, sampleStatus, selectedTrackId, stopVoice]);
+  }, [commitTracks, ensureAudio, loadSampleInstrument, sampleStatus, selectedTrackId, stopVoice]);
 
   const releaseLiveNote = useCallback((note: number) => {
     heldNotesRef.current.delete(note);
+    if (heldNotesRef.current.size === 0) stepChordStartRef.current = null;
     const key = liveVoiceKeysRef.current.get(note);
     if (!key) return;
     if (sustainRef.current) {
@@ -900,6 +919,7 @@ export default function Home() {
   useEffect(() => { loopRef.current = looping; }, [looping]);
   useEffect(() => { currentStepRef.current = currentStep; }, [currentStep]);
   useEffect(() => { recordingRef.current = isRecording; }, [isRecording]);
+  useEffect(() => { stepInputRef.current = stepInput; }, [stepInput]);
 
   useEffect(() => {
     const master = masterGainRef.current;
@@ -1037,6 +1057,7 @@ export default function Home() {
           <button className={`device-button ${connection === "connected" ? "online" : ""}`} onClick={() => setDeviceDrawer(true)}>
             <i /> {connection === "connected" ? t.midiOnline : t.connectDevice}
           </button>
+          <a className="guide-link" href="/guide" aria-label={t.openGuide}><b>?</b><span>{t.guide}</span></a>
           <button className="language-toggle" onClick={() => changeLocale(locale === "zh" ? "en" : "zh")} aria-label={t.switchLanguage} title={t.switchLanguage}>
             <b>{locale === "zh" ? "中" : "EN"}</b><span>/</span><small>{locale === "zh" ? "EN" : "中"}</small>
           </button>
@@ -1071,26 +1092,17 @@ export default function Home() {
       <section className="workspace">
         <aside className={`library-panel ${mobilePanel === "library" ? "mobile-open" : ""}`}>
           <div className="panel-heading"><div><span>{t.browser.toUpperCase()}</span><strong>{t.libraryTitle}</strong></div><button className="panel-close" onClick={() => setMobilePanel(null)} aria-label={t.closePanel}>×</button></div>
-          <div className="library-tabs"><button className="selected">{t.tones}</button><button onClick={() => notify(t.sampleLibraryManaged)}>{t.samples}</button><button onClick={() => notify(t.effectsInChannel)}>{t.effects}</button></div>
           <div className="instrument-library">
             <div className="library-group"><span>{t.studioCollection.toUpperCase()} · {CORE_INSTRUMENTS.length}</span></div>
             {CORE_INSTRUMENTS.map((instrument) => (
-              <button key={instrument.id} className={selectedTrack?.instrument === instrument.id ? "selected" : ""} onClick={() => changeInstrument(instrument.id)}>
+              <button key={instrument.id} className={selectedTrack?.instrument === instrument.id ? "selected" : ""} onClick={() => { changeInstrument(instrument.id); setMobilePanel(null); }}>
                 <i style={{ background: instrument.color }}>{instrument.icon}</i><span><strong>{instrumentName(instrument, locale)}</strong><small>{instrumentFamily(instrument, locale)}</small></span><b>›</b>
               </button>
             ))}
             <div className="library-group chinese"><span>{t.chineseCollection.toUpperCase()} · {CHINESE_INSTRUMENTS.length}</span><div><button onClick={() => setModal("samples")}>{t.credits}</button><button onClick={addChineseSuite}>＋ {t.fullSuite}</button></div></div>
             {CHINESE_INSTRUMENTS.map((instrument) => (
-              <button key={instrument.id} className={`${selectedTrack?.instrument === instrument.id ? "selected" : ""} sample-instrument`} onClick={() => changeInstrument(instrument.id)}>
+              <button key={instrument.id} className={`${selectedTrack?.instrument === instrument.id ? "selected" : ""} sample-instrument`} onClick={() => { changeInstrument(instrument.id); setMobilePanel(null); }}>
                 <i style={{ background: instrument.color }}>{instrument.icon}</i><span><strong>{instrumentName(instrument, locale)}</strong><small>{instrumentFamily(instrument, locale)} · {sampleStatus[instrument.id] === "ready" ? t.ready : sampleStatus[instrument.id] === "loading" ? t.loading : sampleStatus[instrument.id] === "error" ? t.synthFallback : t.loadOnDemand}</small></span><b className={sampleStatus[instrument.id] ?? "idle"}>{sampleStatus[instrument.id] === "loading" ? "◌" : sampleStatus[instrument.id] === "ready" ? "●" : "↓"}</b>
-              </button>
-            ))}
-          </div>
-          <div className="track-list-heading"><span>{t.tracks.toUpperCase()} · {tracks.length}</span><button onClick={() => setModal("new-track")} aria-label={t.addTrack}>＋</button></div>
-          <div className="compact-track-list">
-            {tracks.map((track, index) => (
-              <button key={track.id} className={track.id === selectedTrackId ? "selected" : ""} onClick={() => { selectTrack(track); setMobilePanel(null); }}>
-                <span className="track-number">{String(index + 1).padStart(2, "0")}</span><i style={{ background: track.color }} /><span>{track.name}</span>
               </button>
             ))}
           </div>
@@ -1153,6 +1165,11 @@ export default function Home() {
                 <span className="velocity-chip">VEL {selectedNote?.velocity ?? "—"}</span>
               </div>
             </div>
+            <div className="roll-input-bar">
+              <button className={stepInput ? "engaged" : ""} aria-pressed={stepInput} onClick={() => setStepInput((enabled) => { const next = !enabled; stepInputRef.current = next; return next; })}><i />{t.stepInput}</button>
+              <p><strong>{t.stepInputHint}</strong><span>{t.liveRecordHint}</span></p>
+              <a href="/guide#roll-input">{t.learnMore} ↗</a>
+            </div>
             <div className="roll-body">
               <div className="roll-key-labels" aria-hidden="true">
                 {editorNotes.map((note) => <span className={isBlack(note) ? "black" : ""} key={note}>{note % 12 === 0 ? noteName(note) : ""}</span>)}
@@ -1199,9 +1216,6 @@ export default function Home() {
         <aside className={`mixer-panel ${mobilePanel === "mixer" ? "mobile-open" : ""}`}>
           <div className="panel-heading"><div><span>{t.channelStrip.toUpperCase()}</span><strong>{t.trackMixer}</strong></div><button className="panel-close" onClick={() => setMobilePanel(null)} aria-label={t.closePanel}>×</button></div>
           <div className="channel-identity"><i style={{ background: selectedTrack?.color }} /> <div><span>{t.selectedTrack.toUpperCase()}</span><input value={selectedTrack?.name ?? ""} onChange={(event) => updateTrack(selectedTrackId, { name: event.target.value.toUpperCase() })} aria-label={t.trackName} /></div><b>{String(tracks.findIndex((track) => track.id === selectedTrackId) + 1).padStart(2, "0")}</b></div>
-          <div className="mixer-section"><span>{t.instrument.toUpperCase()}</span><select value={selectedTrack?.instrument} onChange={(event) => changeInstrument(event.target.value as InstrumentId)}>{INSTRUMENTS.map((instrument) => <option key={instrument.id} value={instrument.id}>{instrumentName(instrument, locale)}</option>)}</select></div>
-          <div className="insert-list"><span>{t.inserts.toUpperCase()}</span><button><i>01</i><b>{t.compressor.toUpperCase()}</b><em>{t.on.toUpperCase()}</em></button><button><i>02</i><b>{t.eq.toUpperCase()}</b><em>{t.on.toUpperCase()}</em></button><button onClick={() => notify(t.emptySlotReady)}><i>03</i><b>{t.emptySlot.toUpperCase()}</b><em>＋</em></button></div>
-          <div className="send-section"><span>{t.sends.toUpperCase()}</span><div><label><b>{t.reverb.toUpperCase()}</b><input type="range" min="0" max="100" value={selectedTrack?.reverb ?? 0} onChange={(event) => updateTrack(selectedTrackId, { reverb: Number(event.target.value) })} /><small>{selectedTrack?.reverb}%</small></label><label><b>{t.delay.toUpperCase()}</b><input type="range" min="0" max="100" defaultValue="12" /><small>12%</small></label></div></div>
           <div className="channel-controls">
             <label><span>{t.pan.toUpperCase()}</span><input type="range" min="-100" max="100" value={selectedTrack?.pan ?? 0} onChange={(event) => updateTrack(selectedTrackId, { pan: Number(event.target.value) })} /><b>{selectedTrack?.pan === 0 ? "C" : selectedTrack && selectedTrack.pan < 0 ? `L${Math.abs(selectedTrack.pan)}` : `R${selectedTrack?.pan}`}</b></label>
             <div className="fader-wrap"><div className="meter-bars"><i /><i /><i /><i /><i /><i /><i /><i /><i /><i /><i /><i /></div><input className="vertical-fader" type="range" min="0" max="100" value={selectedTrack?.volume ?? 0} onChange={(event) => updateTrack(selectedTrackId, { volume: Number(event.target.value) })} /><div className="db-scale"><span>0</span><span>-6</span><span>-12</span><span>-24</span><span>-∞</span></div></div>
