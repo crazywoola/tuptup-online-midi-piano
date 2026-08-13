@@ -1,6 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  dataUrlToArrayBuffer,
+  decodeSoundfontAnchors,
+  fetchSoundfontText,
+  nearestSoundfontEntry,
+  parseMidiJsSoundfont,
+  SAMPLE_SOURCES,
+  type InstrumentId,
+  type SampleSource,
+  type SampleStatus,
+  type SoundfontEntry,
+} from "@/lib/soundfont";
 
 const TARGET_DEVICE = "TupTup TS01-MIDI";
 const PUBLIC_SITE_URL = "https://tuptup-midi-studio.bananapink.chatgpt.site";
@@ -11,8 +23,7 @@ const EDITOR_LOW = KEYBOARD_LOW;
 const EDITOR_HIGH = KEYBOARD_HIGH;
 const STORAGE_KEY = "tuptup-studio-project-v2";
 const LOCALE_STORAGE_KEY = "tuptup-studio-locale";
-const FLUID_SOUNDFONT_BASE = "https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM";
-const SAMPLE_ANCHOR_NOTES = [36, 42, 48, 54, 60, 66, 72, 78, 84, 90, 96];
+const ONBOARDING_STORAGE_KEY = "tuptup-studio-onboarding-v1";
 
 const KEYBOARD_MAP: Record<string, number> = {
   a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6,
@@ -24,16 +35,7 @@ const NOTE_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A"
 type ConnectionState = "idle" | "searching" | "connected" | "missing" | "blocked" | "error";
 type Locale = "zh" | "en";
 type DeviceMessageKind = "idle" | "searching" | "connected" | "missing" | "unsupported" | "failed";
-type ModalName = "new-track" | "audio" | "shortcuts" | "export" | "samples" | null;
-type InstrumentId = "grand" | "electric" | "pad" | "bass" | "lead" | "organ" | "marimba" | "strings" | "drums" | "guzheng" | "erhu" | "pipa" | "dizi" | "yangqin" | "suona" | "sheng" | "chinesePercussion";
-
-type SampleSpec = {
-  kind: "soundfont" | "audio";
-  asset: string;
-  rootNote?: number;
-  source: string;
-  license: string;
-};
+type ModalName = "new-track" | "audio" | "shortcuts" | "export" | "samples" | "sound-check" | null;
 
 type Instrument = {
   id: InstrumentId;
@@ -52,14 +54,14 @@ type Instrument = {
   cutoff: number;
   program: number;
   collection?: "chinese";
-  sample?: SampleSpec;
+  sample: SampleSource;
 };
 
 const UI_TEXT = {
   zh: {
     project: "工程", projectName: "工程名称", projectActions: "工程操作", newProject: "新建", importMidi: "导入 MIDI", save: "保存", export: "导出", midiOnline: "MIDI 在线", connectDevice: "连接设备",
     language: "语言", switchLanguage: "切换到 English", guide: "说明书", openGuide: "打开功能说明书", transport: "传输控制", openLibrary: "打开音色库", undo: "撤销", redo: "重做", metronome: "节拍器", tempo: "速度", countIn: "预备拍", returnStart: "回到开头", pause: "暂停", play: "播放", stopRecording: "停止录音", record: "录音", loop: "循环", master: "主音量", audioSettings: "音频设置", openMixer: "打开混音器",
-    browser: "浏览器", libraryTitle: "音色库", tones: "音色", samples: "采样", effects: "效果", sampleLibraryManaged: "采样库可在工程包中管理", effectsInChannel: "效果器位于右侧通道条", studioCollection: "录音室", chineseCollection: "国风采样", credits: "来源", fullSuite: "整套", tracks: "音轨", ready: "已就绪", loading: "加载中", synthFallback: "合成回退", loadOnDemand: "按需加载",
+    browser: "浏览器", libraryTitle: "音色库", tones: "音色", samples: "采样", effects: "效果", sampleLibraryManaged: "采样库可在工程包中管理", effectsInChannel: "效果器位于右侧通道条", studioCollection: "录音室", chineseCollection: "国风采样", credits: "来源", fullSuite: "整套", tracks: "音轨", ready: "采样就绪", loading: "采样加载中", synthFallback: "合成回退", loadOnDemand: "云端高清", soundCheck: "音色检查", openSoundCheck: "打开全部乐器音色检查", previewSound: "试听", retrySample: "重试", checkAll: "检查全部 17 件乐器", checkingAll: "正在逐件检查…", soundCheckTitle: "让每件乐器都发出正确的声音", soundCheckHelp: "逐件下载并解码代表音符。完整检查约需 30–45 MB；未加载或网络失败时仍会立即使用合成音色。", sampleCheckComplete: (ready: number) => `音色检查完成 · ${ready}/17 采样就绪`, cachedSample: "已缓存", fallbackActive: "回退可用", sampleError: "需要重试",
     arrangement: "编曲", arrangementTitle: "编曲时间线", selectTool: "选择工具", pencilTool: "铅笔工具", splitTool: "切割工具", grid: "网格", gridAccuracy: "网格精度", add: "添加", addInstrumentTrack: "添加乐器音轨", notes: "音符",
     pianoRoll: "钢琴卷帘", quantize: "量化 1/16", humanize: "人性化", duplicate: "重复", delete: "删除", rollHelp: "钢琴卷帘，点击空白处添加音符", stepLabel: (step: number) => `第 ${step} 格`, stepInput: "步进输入", stepInputHint: "开启后，按下方键盘、电脑 A–K 或 MIDI 键盘，音符会写入播放头并自动前进", liveRecordHint: "实时演奏请先待录音轨，再按 R 或录音键", learnMore: "查看完整说明",
     liveInput: "实时输入", note: "音符", velocity: "力度", octave: "八度", sustain: "延音", sampleReady: "采样就绪", playToLoad: "演奏以加载", computerKeys: "电脑键 A–K", keyboardLabel: "共享 61 键演奏键盘",
@@ -67,17 +69,18 @@ const UI_TEXT = {
     audioEngine: "音频引擎", polyphony: "复音数", autosave: "自动保存 · 本机", hardware: "硬件", midiDevice: "MIDI 设备", connected: "已连接", readyToConnect: "等待连接", searchingDevices: "正在搜索设备…", rescanMidi: "重新扫描 MIDI 输入", connectMidiKeyboard: "连接 MIDI 键盘", inputMode: "输入模式", allChannels: "全通道", latency: "延迟", interactive: "交互级", dataPrivacy: "数据隐私", localOnly: "仅限本机",
     deviceIdle: "尚未连接硬件；电脑键盘可直接演奏", deviceSearching: "正在请求 MIDI 设备权限…", deviceMissing: "未发现 MIDI 输入，请检查 USB 连接", deviceUnsupported: "当前浏览器不支持 Web MIDI，请使用桌面版 Chrome 或 Edge", deviceFailed: "连接失败；请允许 MIDI 权限后重试", devicePorts: (count: number) => `${count} 个输入端口在线 · 通道全开`,
     desktopBrowserRequired: "需要桌面版 Chrome 或 Edge", usbPreviewWarning: "内置预览可能无法访问 USB。请在受支持的浏览器打开正式站点并允许 MIDI 权限。", copySiteLink: "复制站点链接", siteLinkCopied: "站点链接已复制", controllerMap: "控制器映射", sustainPedal: "延音踏板", playSelectedTrack: "演奏当前音轨", computerSustain: "电脑键盘延音",
-    addTrack: "添加音轨", chooseInstrument: "选择你的下一件乐器", sharedKeyboardHelp: "所有音轨共享下方键盘，国风乐器会在首次选择时加载公开采样。", chineseSuite: "国风采样套组", chineseSuiteList: "古筝 · 二胡 · 琵琶 · 竹笛 · 扬琴 · 唢呐 · 笙 · 锣鼓", addEightTracks: "加入 8 条音轨", sampleBadge: "采样",
+    addTrack: "添加音轨", chooseInstrument: "选择你的下一件乐器", sharedKeyboardHelp: "所有音轨共享下方键盘；每件乐器首次使用时加载公开高清采样，并始终保留零等待合成回退。", chineseSuite: "国风采样套组", chineseSuiteList: "古筝 · 二胡 · 琵琶 · 竹笛 · 扬琴 · 唢呐 · 笙 · 锣鼓", addEightTracks: "加入 8 条音轨", sampleBadge: "高清采样",
     settings: "设置", audioRecordingSettings: "音频与录音设置", lowLatencyHelp: "为浏览器内的低延迟演奏优化。", audioBuffer: "音频缓冲", bufferHelp: "延迟越低，CPU 占用越高", sampleRate: "采样率", sampleRateHelp: "当前音频上下文", recordingCountIn: "录音预备拍", recordingCountInHelp: "录音前播放一小节节拍", loopRecording: "循环录音", loopRecordingHelp: "持续覆盖 2 小节循环区域", done: "完成",
     keyCommands: "快捷键", handsOnMusic: "把双手留给音乐", keyboardMidiTogether: "电脑键盘与 MIDI 键盘可同时使用。", playPause: "播放 / 暂停", startStopRecording: "开始 / 停止录音", playCurrentSound: "演奏当前音色", undoEdit: "撤销编辑", deleteSelectedNote: "删除选中音符", saveLocally: "保存到本机",
     bounceShare: "导出与分享", takeYourMusic: "带走你的作品", trackCount: (count: number) => `${count} 条音轨`, noteCount: (count: number) => `${count} 个音符`, standardMidi: "标准 MIDI 文件", midiCompatibility: "兼容 Logic、Ableton、Cubase 与大多数硬件", projectBundle: "TupTup 工程包", projectBundleHelp: "保留音色、混音、速度和所有音轨数据", download: "下载", privacyPromise: "所有演奏与导出均在此设备完成，不会上传音乐数据。",
-    sampleCredits: "采样鸣谢", sampleSuiteTitle: "国风采样套组", sampleCreditsHelp: "按需从公开音源加载；下载后缓存在当前浏览器会话。无法联网时自动使用内置合成音色。", erhuPerformance: "真实二胡 Regular Vibrato A4 · 演奏 Yu Chun Chan", remainingSeven: "其余七件乐器", soundfontMapping: "FluidR3 GM 多采样映射 · Koto / Shamisen / Flute / Dulcimer / Shanai / Reed Organ / Taiko", berkleeSource: "Berklee 二胡采样来源", fluidSource: "FluidR3 SoundFont 来源", closePanel: "关闭面板",
+    sampleCredits: "采样鸣谢", sampleSuiteTitle: "公开高清采样音源", sampleCreditsHelp: "全部 17 件乐器均有采样映射。FluidR3 GM 音色按需流式加载并持久缓存在浏览器；无法联网时自动使用内置合成音色。", erhuPerformance: "真实二胡 Regular Vibrato A4 · 演奏 Yu Chun Chan", remainingSeven: "FluidR3 GM 音色库", soundfontMapping: "16 件乐器 · 88 音高完整 SoundFont · CC BY 3.0", berkleeSource: "Berklee 二胡采样来源", fluidSource: "FluidR3 SoundFont 来源", closePanel: "关闭面板",
+    firstLoop: "完成你的第一段 Loop", beginnerHint: "三步开始，不需要先学会整套工作站。", chooseASound: "选择喜欢的音色", enableInput: "开启步进输入或待录", playFirstNote: "演奏第一颗音符", onboardingDone: "准备好了，开始创作", hideCoach: "收起新手引导", showCoach: "显示新手引导", startHere: "从这里开始",
     brandToast: "TupTup Studio · 浏览器 MIDI 工作站", sampleLoaded: (name: string) => `${name} 采样已就绪`, sampleFailed: (name: string) => `${name} 加载失败，已使用合成音色`, countInRecording: "预备拍开启 · 开始录音", recordingStarted: "录音已开始", recordingStopped: "录音已停止", midiConnected: "MIDI 键盘已连接", trackCreated: (name: string) => `${name} 音轨已创建`, suiteAdded: "国风采样套组已加入 · 8 条音轨", trackDeleted: "音轨已删除 · 可撤销", projectCreated: "新工程已创建", projectSaved: "工程已保存到此设备", midiExported: "MIDI 已导出", bundleExported: "工程包已导出", midiImported: (count: number) => `已导入 ${count} 条 MIDI 音轨`, midiImportFailed: "无法读取此 MIDI 文件",
   },
   en: {
     project: "Project", projectName: "Project name", projectActions: "Project actions", newProject: "New", importMidi: "Import MIDI", save: "Save", export: "Export", midiOnline: "MIDI Online", connectDevice: "Connect Device",
     language: "Language", switchLanguage: "切换到中文", guide: "Guide", openGuide: "Open the feature guide", transport: "Transport controls", openLibrary: "Open sound library", undo: "Undo", redo: "Redo", metronome: "Metronome", tempo: "Tempo", countIn: "Count-in", returnStart: "Return to start", pause: "Pause", play: "Play", stopRecording: "Stop recording", record: "Record", loop: "Loop", master: "Master", audioSettings: "Audio settings", openMixer: "Open mixer",
-    browser: "Browser", libraryTitle: "Sound Library", tones: "Sounds", samples: "Samples", effects: "Effects", sampleLibraryManaged: "Manage the sample library in the project bundle", effectsInChannel: "Effects are available in the channel strip", studioCollection: "Studio", chineseCollection: "Chinese Samples", credits: "Credits", fullSuite: "Full Suite", tracks: "Tracks", ready: "Ready", loading: "Loading", synthFallback: "Synth Fallback", loadOnDemand: "Load on Demand",
+    browser: "Browser", libraryTitle: "Sound Library", tones: "Sounds", samples: "Samples", effects: "Effects", sampleLibraryManaged: "Manage the sample library in the project bundle", effectsInChannel: "Effects are available in the channel strip", studioCollection: "Studio", chineseCollection: "Chinese Samples", credits: "Credits", fullSuite: "Full Suite", tracks: "Tracks", ready: "Sample Ready", loading: "Loading Sample", synthFallback: "Synth Fallback", loadOnDemand: "Cloud HD", soundCheck: "Sound Check", openSoundCheck: "Open the all-instrument sound check", previewSound: "Preview", retrySample: "Retry", checkAll: "Check All 17 Instruments", checkingAll: "Checking every instrument…", soundCheckTitle: "Make sure every instrument sounds right", soundCheckHelp: "Downloads and decodes a representative note for every instrument. A full check uses about 30–45 MB; synthesis still responds instantly before samples load or when offline.", sampleCheckComplete: (ready: number) => `Sound check complete · ${ready}/17 samples ready`, cachedSample: "Cached", fallbackActive: "Fallback Ready", sampleError: "Retry Needed",
     arrangement: "Arrangement", arrangementTitle: "Arrangement Timeline", selectTool: "Select tool", pencilTool: "Pencil tool", splitTool: "Split tool", grid: "Grid", gridAccuracy: "Grid resolution", add: "Add", addInstrumentTrack: "Add Instrument Track", notes: "Notes",
     pianoRoll: "Piano Roll", quantize: "Quantize 1/16", humanize: "Humanize", duplicate: "Duplicate", delete: "Delete", rollHelp: "Piano roll; click empty space to add a note", stepLabel: (step: number) => `step ${step}`, stepInput: "Step Input", stepInputHint: "Turn it on, then play the keyboard below, A–K, or a MIDI keyboard. Notes land at the playhead and advance automatically.", liveRecordHint: "For live performance, arm a track and press R or Record", learnMore: "View Full Guide",
     liveInput: "Live Input", note: "Note", velocity: "Velocity", octave: "Octave", sustain: "Sustain", sampleReady: "Sample Ready", playToLoad: "Play to Load", computerKeys: "Computer Keys A–K", keyboardLabel: "Shared 61-key performance keyboard",
@@ -85,11 +88,12 @@ const UI_TEXT = {
     audioEngine: "Audio Engine", polyphony: "Polyphony", autosave: "Autosave · Local", hardware: "Hardware", midiDevice: "MIDI Device", connected: "Connected", readyToConnect: "Ready to Connect", searchingDevices: "Searching for devices…", rescanMidi: "Rescan MIDI Inputs", connectMidiKeyboard: "Connect MIDI Keyboard", inputMode: "Input Mode", allChannels: "Omni · All Channels", latency: "Latency", interactive: "Interactive", dataPrivacy: "Data Privacy", localOnly: "Local Only",
     deviceIdle: "No hardware connected; use the computer keyboard to play", deviceSearching: "Requesting MIDI device permission…", deviceMissing: "No MIDI input found; check the USB connection", deviceUnsupported: "Web MIDI is not supported here; use desktop Chrome or Edge", deviceFailed: "Connection failed; allow MIDI access and try again", devicePorts: (count: number) => `${count} input ${count === 1 ? "port" : "ports"} online · all channels`,
     desktopBrowserRequired: "Desktop Chrome or Edge Required", usbPreviewWarning: "The embedded preview may not access USB. Open the live site in a supported browser and allow MIDI permission.", copySiteLink: "Copy Site Link", siteLinkCopied: "Site link copied", controllerMap: "Controller Map", sustainPedal: "Sustain pedal", playSelectedTrack: "Play selected track", computerSustain: "Computer sustain",
-    addTrack: "Add Track", chooseInstrument: "Choose Your Next Instrument", sharedKeyboardHelp: "Every track shares the keyboard below. Chinese instruments load public samples the first time you select them.", chineseSuite: "Chinese Sample Suite", chineseSuiteList: "Guzheng · Erhu · Pipa · Dizi · Yangqin · Suona · Sheng · Percussion", addEightTracks: "Add 8 Tracks", sampleBadge: "Sample",
+    addTrack: "Add Track", chooseInstrument: "Choose Your Next Instrument", sharedKeyboardHelp: "Every track shares the keyboard below. Each instrument streams a public HD sample on first use and always keeps a zero-wait synth fallback.", chineseSuite: "Chinese Sample Suite", chineseSuiteList: "Guzheng · Erhu · Pipa · Dizi · Yangqin · Suona · Sheng · Percussion", addEightTracks: "Add 8 Tracks", sampleBadge: "HD Sample",
     settings: "Settings", audioRecordingSettings: "Audio & Recording Settings", lowLatencyHelp: "Optimized for low-latency performance in the browser.", audioBuffer: "Audio Buffer", bufferHelp: "Lower latency uses more CPU", sampleRate: "Sample Rate", sampleRateHelp: "Current audio context", recordingCountIn: "Recording Count-in", recordingCountInHelp: "Play one bar before recording", loopRecording: "Loop Recording", loopRecordingHelp: "Continuously overdub the two-bar loop", done: "Done",
     keyCommands: "Key Commands", handsOnMusic: "Keep Your Hands on the Music", keyboardMidiTogether: "Use the computer keyboard and a MIDI keyboard together.", playPause: "Play / Pause", startStopRecording: "Start / Stop Recording", playCurrentSound: "Play Current Sound", undoEdit: "Undo Edit", deleteSelectedNote: "Delete Selected Note", saveLocally: "Save Locally",
     bounceShare: "Bounce & Share", takeYourMusic: "Take Your Music With You", trackCount: (count: number) => `${count} ${count === 1 ? "track" : "tracks"}`, noteCount: (count: number) => `${count} ${count === 1 ? "note" : "notes"}`, standardMidi: "Standard MIDI File", midiCompatibility: "Works with Logic, Ableton, Cubase and most hardware", projectBundle: "TupTup Project Bundle", projectBundleHelp: "Preserves sounds, mix, tempo and every track", download: "Download", privacyPromise: "Performance and export stay on this device. No music data is uploaded.",
-    sampleCredits: "Sample Credits", sampleSuiteTitle: "Chinese Sample Suite", sampleCreditsHelp: "Public sound sources load on demand and stay cached for this browser session. Built-in synthesis takes over when offline.", erhuPerformance: "Real Erhu Regular Vibrato A4 · performed by Yu Chun Chan", remainingSeven: "Seven More Instruments", soundfontMapping: "FluidR3 GM multisample mappings · Koto / Shamisen / Flute / Dulcimer / Shanai / Reed Organ / Taiko", berkleeSource: "Berklee Erhu Sample Source", fluidSource: "FluidR3 SoundFont Source", closePanel: "Close panel",
+    sampleCredits: "Sample Credits", sampleSuiteTitle: "Open HD Sample Sources", sampleCreditsHelp: "All 17 instruments have sample mappings. FluidR3 GM sounds stream on demand and persist in the browser cache; built-in synthesis takes over when offline.", erhuPerformance: "Real Erhu Regular Vibrato A4 · performed by Yu Chun Chan", remainingSeven: "FluidR3 GM Library", soundfontMapping: "16 instruments · complete 88-note SoundFonts · CC BY 3.0", berkleeSource: "Berklee Erhu Sample Source", fluidSource: "FluidR3 SoundFont Source", closePanel: "Close panel",
+    firstLoop: "Make Your First Loop", beginnerHint: "Start in three steps—no need to learn the whole workstation first.", chooseASound: "Choose a sound you like", enableInput: "Enable Step Input or arm a track", playFirstNote: "Play your first note", onboardingDone: "You are ready—make some music", hideCoach: "Hide beginner guide", showCoach: "Show beginner guide", startHere: "Start Here",
     brandToast: "TupTup Studio · Browser MIDI Workstation", sampleLoaded: (name: string) => `${name} sample is ready`, sampleFailed: (name: string) => `${name} failed to load; using the synth fallback`, countInRecording: "Count-in enabled · recording started", recordingStarted: "Recording started", recordingStopped: "Recording stopped", midiConnected: "MIDI keyboard connected", trackCreated: (name: string) => `${name} track created`, suiteAdded: "Chinese sample suite added · 8 tracks", trackDeleted: "Track deleted · undo available", projectCreated: "New project created", projectSaved: "Project saved on this device", midiExported: "MIDI exported", bundleExported: "Project bundle exported", midiImported: (count: number) => `Imported ${count} MIDI ${count === 1 ? "track" : "tracks"}`, midiImportFailed: "This MIDI file could not be read",
   },
 } as const;
@@ -128,23 +132,23 @@ type SampleAnchor = {
 };
 
 const INSTRUMENTS: Instrument[] = [
-  { id: "grand", name: "Studio Grand", family: "钢琴", nameZh: "录音室大钢琴", nameEn: "Studio Grand", familyZh: "钢琴", familyEn: "Piano", icon: "♩", color: "#9df564", wave: "triangle", overtone: "sine", attack: .008, release: .7, cutoff: 5200, program: 0 },
-  { id: "electric", name: "Velvet Keys", family: "电钢", nameZh: "丝绒电钢", nameEn: "Velvet Keys", familyZh: "电钢", familyEn: "Electric Piano", icon: "⌁", color: "#63d7ff", wave: "sine", overtone: "triangle", attack: .012, release: .9, cutoff: 4200, program: 4 },
-  { id: "pad", name: "Aurora Pad", family: "合成器", nameZh: "极光铺底", nameEn: "Aurora Pad", familyZh: "合成器", familyEn: "Synthesizer", icon: "≈", color: "#b69cff", wave: "sawtooth", overtone: "triangle", attack: .32, release: 1.5, cutoff: 1700, program: 89 },
-  { id: "bass", name: "Deep Mono", family: "贝斯", nameZh: "深潜单声道", nameEn: "Deep Mono", familyZh: "贝斯", familyEn: "Bass", icon: "≋", color: "#ffbb55", wave: "square", overtone: "sawtooth", attack: .01, release: .35, cutoff: 1100, program: 38 },
-  { id: "lead", name: "Neon Lead", family: "合成器", nameZh: "霓虹主音", nameEn: "Neon Lead", familyZh: "合成器", familyEn: "Synthesizer", icon: "⌁", color: "#ff6c8f", wave: "sawtooth", overtone: "square", attack: .018, release: .28, cutoff: 3600, program: 81 },
-  { id: "organ", name: "Moon Organ", family: "风琴", nameZh: "月光风琴", nameEn: "Moon Organ", familyZh: "风琴", familyEn: "Organ", icon: "Ⅱ", color: "#f5e663", wave: "sine", overtone: "square", attack: .02, release: .5, cutoff: 4800, program: 16 },
-  { id: "marimba", name: "Glass Marimba", family: "打击乐", nameZh: "玻璃马林巴", nameEn: "Glass Marimba", familyZh: "打击乐", familyEn: "Percussion", icon: "◇", color: "#57e0ba", wave: "sine", overtone: "sine", attack: .004, release: .42, cutoff: 7000, program: 12 },
-  { id: "strings", name: "Warm Ensemble", family: "弦乐", nameZh: "温暖弦乐群", nameEn: "Warm Ensemble", familyZh: "弦乐", familyEn: "Strings", icon: "〰", color: "#ef9dff", wave: "sawtooth", overtone: "triangle", attack: .16, release: 1.2, cutoff: 2300, program: 48 },
-  { id: "drums", name: "Pulse Kit", family: "鼓组", nameZh: "脉冲鼓组", nameEn: "Pulse Kit", familyZh: "鼓组", familyEn: "Drum Kit", icon: "●", color: "#ff7a52", wave: "square", overtone: "sine", attack: .002, release: .2, cutoff: 6200, program: 0 },
-  { id: "guzheng", name: "流光古筝", family: "国风 · 弹拨", nameZh: "流光古筝", nameEn: "Luminous Guzheng", familyZh: "国风 · 弹拨", familyEn: "Chinese · Plucked", icon: "筝", color: "#e7bd62", wave: "triangle", overtone: "sine", attack: .004, release: 1.1, cutoff: 6800, program: 107, collection: "chinese", sample: { kind: "soundfont", asset: "koto", source: "FluidR3 GM", license: "CC BY 3.0" } },
-  { id: "erhu", name: "烟雨二胡", family: "国风 · 拉弦", nameZh: "烟雨二胡", nameEn: "Mist Erhu", familyZh: "国风 · 拉弦", familyEn: "Chinese · Bowed", icon: "胡", color: "#dd7f6f", wave: "sawtooth", overtone: "triangle", attack: .035, release: .7, cutoff: 3900, program: 110, collection: "chinese", sample: { kind: "audio", asset: "/samples/chinese/erhu-vibrato-a4.wav", rootNote: 69, source: "Berklee BISA", license: "CC BY 4.0" } },
-  { id: "pipa", name: "飞花琵琶", family: "国风 · 弹拨", nameZh: "飞花琵琶", nameEn: "Blooming Pipa", familyZh: "国风 · 弹拨", familyEn: "Chinese · Plucked", icon: "琵", color: "#f29b63", wave: "triangle", overtone: "square", attack: .003, release: .65, cutoff: 6200, program: 106, collection: "chinese", sample: { kind: "soundfont", asset: "shamisen", source: "FluidR3 GM", license: "CC BY 3.0" } },
-  { id: "dizi", name: "清风竹笛", family: "国风 · 吹管", nameZh: "清风竹笛", nameEn: "Bamboo Dizi", familyZh: "国风 · 吹管", familyEn: "Chinese · Wind", icon: "笛", color: "#64d9ad", wave: "sine", overtone: "triangle", attack: .035, release: .52, cutoff: 7200, program: 73, collection: "chinese", sample: { kind: "soundfont", asset: "flute", source: "FluidR3 GM", license: "CC BY 3.0" } },
-  { id: "yangqin", name: "星河扬琴", family: "国风 · 击弦", nameZh: "星河扬琴", nameEn: "Starlight Yangqin", familyZh: "国风 · 击弦", familyEn: "Chinese · Hammered", icon: "扬", color: "#7fc5ef", wave: "triangle", overtone: "sine", attack: .003, release: .9, cutoff: 7500, program: 15, collection: "chinese", sample: { kind: "soundfont", asset: "dulcimer", source: "FluidR3 GM", license: "CC BY 3.0" } },
-  { id: "suona", name: "赤焰唢呐", family: "国风 · 双簧", nameZh: "赤焰唢呐", nameEn: "Blazing Suona", familyZh: "国风 · 双簧", familyEn: "Chinese · Double Reed", icon: "呐", color: "#ff646c", wave: "sawtooth", overtone: "square", attack: .016, release: .35, cutoff: 5600, program: 111, collection: "chinese", sample: { kind: "soundfont", asset: "shanai", source: "FluidR3 GM", license: "CC BY 3.0" } },
-  { id: "sheng", name: "云岫笙", family: "国风 · 簧管", nameZh: "云岫笙", nameEn: "Cloud Sheng", familyZh: "国风 · 簧管", familyEn: "Chinese · Free Reed", icon: "笙", color: "#b7a0ff", wave: "sine", overtone: "square", attack: .028, release: .65, cutoff: 5100, program: 20, collection: "chinese", sample: { kind: "soundfont", asset: "reed_organ", source: "FluidR3 GM", license: "CC BY 3.0" } },
-  { id: "chinesePercussion", name: "醒狮锣鼓", family: "国风 · 打击乐", nameZh: "醒狮锣鼓", nameEn: "Lion Dance Percussion", familyZh: "国风 · 打击乐", familyEn: "Chinese · Percussion", icon: "鼓", color: "#ffcc4f", wave: "square", overtone: "sine", attack: .002, release: .32, cutoff: 6600, program: 116, collection: "chinese", sample: { kind: "soundfont", asset: "taiko_drum", source: "FluidR3 GM", license: "CC BY 3.0" } },
+  { id: "grand", name: "Studio Grand", family: "钢琴", nameZh: "录音室大钢琴", nameEn: "Studio Grand", familyZh: "钢琴", familyEn: "Piano", icon: "♩", color: "#9df564", wave: "triangle", overtone: "sine", attack: .008, release: .7, cutoff: 5200, program: 0, sample: SAMPLE_SOURCES.grand },
+  { id: "electric", name: "Velvet Keys", family: "电钢", nameZh: "丝绒电钢", nameEn: "Velvet Keys", familyZh: "电钢", familyEn: "Electric Piano", icon: "⌁", color: "#63d7ff", wave: "sine", overtone: "triangle", attack: .012, release: .9, cutoff: 4200, program: 4, sample: SAMPLE_SOURCES.electric },
+  { id: "pad", name: "Aurora Pad", family: "合成器", nameZh: "极光铺底", nameEn: "Aurora Pad", familyZh: "合成器", familyEn: "Synthesizer", icon: "≈", color: "#b69cff", wave: "sawtooth", overtone: "triangle", attack: .32, release: 1.5, cutoff: 1700, program: 89, sample: SAMPLE_SOURCES.pad },
+  { id: "bass", name: "Deep Mono", family: "贝斯", nameZh: "深潜单声道", nameEn: "Deep Mono", familyZh: "贝斯", familyEn: "Bass", icon: "≋", color: "#ffbb55", wave: "square", overtone: "sawtooth", attack: .01, release: .35, cutoff: 1100, program: 38, sample: SAMPLE_SOURCES.bass },
+  { id: "lead", name: "Neon Lead", family: "合成器", nameZh: "霓虹主音", nameEn: "Neon Lead", familyZh: "合成器", familyEn: "Synthesizer", icon: "⌁", color: "#ff6c8f", wave: "sawtooth", overtone: "square", attack: .018, release: .28, cutoff: 3600, program: 81, sample: SAMPLE_SOURCES.lead },
+  { id: "organ", name: "Moon Organ", family: "风琴", nameZh: "月光风琴", nameEn: "Moon Organ", familyZh: "风琴", familyEn: "Organ", icon: "Ⅱ", color: "#f5e663", wave: "sine", overtone: "square", attack: .02, release: .5, cutoff: 4800, program: 16, sample: SAMPLE_SOURCES.organ },
+  { id: "marimba", name: "Glass Marimba", family: "打击乐", nameZh: "玻璃马林巴", nameEn: "Glass Marimba", familyZh: "打击乐", familyEn: "Percussion", icon: "◇", color: "#57e0ba", wave: "sine", overtone: "sine", attack: .004, release: .42, cutoff: 7000, program: 12, sample: SAMPLE_SOURCES.marimba },
+  { id: "strings", name: "Warm Ensemble", family: "弦乐", nameZh: "温暖弦乐群", nameEn: "Warm Ensemble", familyZh: "弦乐", familyEn: "Strings", icon: "〰", color: "#ef9dff", wave: "sawtooth", overtone: "triangle", attack: .16, release: 1.2, cutoff: 2300, program: 48, sample: SAMPLE_SOURCES.strings },
+  { id: "drums", name: "Pulse Kit", family: "鼓组", nameZh: "脉冲鼓组", nameEn: "Pulse Kit", familyZh: "鼓组", familyEn: "Drum Kit", icon: "●", color: "#ff7a52", wave: "square", overtone: "sine", attack: .002, release: .2, cutoff: 6200, program: 0, sample: SAMPLE_SOURCES.drums },
+  { id: "guzheng", name: "流光古筝", family: "国风 · 弹拨", nameZh: "流光古筝", nameEn: "Luminous Guzheng", familyZh: "国风 · 弹拨", familyEn: "Chinese · Plucked", icon: "筝", color: "#e7bd62", wave: "triangle", overtone: "sine", attack: .004, release: 1.1, cutoff: 6800, program: 107, collection: "chinese", sample: SAMPLE_SOURCES.guzheng },
+  { id: "erhu", name: "烟雨二胡", family: "国风 · 拉弦", nameZh: "烟雨二胡", nameEn: "Mist Erhu", familyZh: "国风 · 拉弦", familyEn: "Chinese · Bowed", icon: "胡", color: "#dd7f6f", wave: "sawtooth", overtone: "triangle", attack: .035, release: .7, cutoff: 3900, program: 110, collection: "chinese", sample: SAMPLE_SOURCES.erhu },
+  { id: "pipa", name: "飞花琵琶", family: "国风 · 弹拨", nameZh: "飞花琵琶", nameEn: "Blooming Pipa", familyZh: "国风 · 弹拨", familyEn: "Chinese · Plucked", icon: "琵", color: "#f29b63", wave: "triangle", overtone: "square", attack: .003, release: .65, cutoff: 6200, program: 106, collection: "chinese", sample: SAMPLE_SOURCES.pipa },
+  { id: "dizi", name: "清风竹笛", family: "国风 · 吹管", nameZh: "清风竹笛", nameEn: "Bamboo Dizi", familyZh: "国风 · 吹管", familyEn: "Chinese · Wind", icon: "笛", color: "#64d9ad", wave: "sine", overtone: "triangle", attack: .035, release: .52, cutoff: 7200, program: 73, collection: "chinese", sample: SAMPLE_SOURCES.dizi },
+  { id: "yangqin", name: "星河扬琴", family: "国风 · 击弦", nameZh: "星河扬琴", nameEn: "Starlight Yangqin", familyZh: "国风 · 击弦", familyEn: "Chinese · Hammered", icon: "扬", color: "#7fc5ef", wave: "triangle", overtone: "sine", attack: .003, release: .9, cutoff: 7500, program: 15, collection: "chinese", sample: SAMPLE_SOURCES.yangqin },
+  { id: "suona", name: "赤焰唢呐", family: "国风 · 双簧", nameZh: "赤焰唢呐", nameEn: "Blazing Suona", familyZh: "国风 · 双簧", familyEn: "Chinese · Double Reed", icon: "呐", color: "#ff646c", wave: "sawtooth", overtone: "square", attack: .016, release: .35, cutoff: 5600, program: 111, collection: "chinese", sample: SAMPLE_SOURCES.suona },
+  { id: "sheng", name: "云岫笙", family: "国风 · 簧管", nameZh: "云岫笙", nameEn: "Cloud Sheng", familyZh: "国风 · 簧管", familyEn: "Chinese · Free Reed", icon: "笙", color: "#b7a0ff", wave: "sine", overtone: "square", attack: .028, release: .65, cutoff: 5100, program: 20, collection: "chinese", sample: SAMPLE_SOURCES.sheng },
+  { id: "chinesePercussion", name: "醒狮锣鼓", family: "国风 · 打击乐", nameZh: "醒狮锣鼓", nameEn: "Lion Dance Percussion", familyZh: "国风 · 打击乐", familyEn: "Chinese · Percussion", icon: "鼓", color: "#ffcc4f", wave: "square", overtone: "sine", attack: .002, release: .32, cutoff: 6600, program: 116, collection: "chinese", sample: SAMPLE_SOURCES.chinesePercussion },
 ];
 
 const CORE_INSTRUMENTS = INSTRUMENTS.filter((instrument) => instrument.collection !== "chinese");
@@ -178,23 +182,6 @@ const KEY_HINTS = Object.fromEntries(Object.entries(KEYBOARD_MAP).map(([key, off
 
 function noteName(note: number) {
   return `${NOTE_NAMES[note % 12]}${Math.floor(note / 12) - 1}`;
-}
-
-function soundfontKeyToMidi(key: string) {
-  const match = /^([A-G])([b#]?)(-?\d+)$/.exec(key);
-  if (!match) return null;
-  const naturalNotes: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-  const natural = naturalNotes[match[1]];
-  const accidental = match[2] === "b" ? -1 : match[2] === "#" ? 1 : 0;
-  return (Number(match[3]) + 1) * 12 + natural + accidental;
-}
-
-function decodeDataUrl(dataUrl: string) {
-  const encoded = dataUrl.slice(dataUrl.indexOf(",") + 1);
-  const binary = window.atob(encoded);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes.buffer;
 }
 
 function isBlack(note: number) {
@@ -366,7 +353,12 @@ export default function Home() {
   const [lastNote, setLastNote] = useState<number | null>(null);
   const [lastVelocity, setLastVelocity] = useState(0);
   const [voiceCount, setVoiceCount] = useState(0);
-  const [sampleStatus, setSampleStatus] = useState<Partial<Record<InstrumentId, "loading" | "ready" | "error">>>({});
+  const [sampleStatus, setSampleStatus] = useState<Partial<Record<InstrumentId, SampleStatus>>>({});
+  const [sampleProgress, setSampleProgress] = useState<Partial<Record<InstrumentId, number>>>({});
+  const [soundCheckRunning, setSoundCheckRunning] = useState(false);
+  const [soundCheckProgress, setSoundCheckProgress] = useState(0);
+  const [onboardingVisible, setOnboardingVisible] = useState(false);
+  const [onboardingSoundChosen, setOnboardingSoundChosen] = useState(false);
   const [sustain, setSustainState] = useState(false);
   const [modal, setModal] = useState<ModalName>(null);
   const [deviceDrawer, setDeviceDrawer] = useState(false);
@@ -378,6 +370,9 @@ export default function Home() {
   const masterGainRef = useRef<GainNode | null>(null);
   const voicesRef = useRef(new Map<string, Voice>());
   const sampleAnchorsRef = useRef(new Map<InstrumentId, SampleAnchor[]>());
+  const sampleCatalogRef = useRef(new Map<InstrumentId, SoundfontEntry[]>());
+  const exactSampleBuffersRef = useRef(new Map<InstrumentId, Map<number, AudioBuffer>>());
+  const exactSamplePromisesRef = useRef(new Map<string, Promise<AudioBuffer | null>>());
   const samplePromisesRef = useRef(new Map<InstrumentId, Promise<SampleAnchor[]>>());
   const liveVoiceKeysRef = useRef(new Map<number, string>());
   const heldNotesRef = useRef(new Set<number>());
@@ -405,6 +400,9 @@ export default function Home() {
   const selectedTrack = tracks.find((track) => track.id === selectedTrackId) ?? tracks[0];
   const selectedInstrument = instrumentById(selectedTrack?.instrument ?? "grand");
   const selectedNote = selectedTrack?.notes.find((note) => note.id === selectedNoteId) ?? null;
+  const onboardingInputReady = Boolean(stepInput || selectedTrack?.arm);
+  const onboardingPlayed = lastNote !== null;
+  const onboardingComplete = onboardingSoundChosen && onboardingInputReady && onboardingPlayed;
   const measure = Math.floor(currentStep / 16) + 1;
   const beat = Math.floor((currentStep % 16) / 4) + 1;
   const subdivision = (currentStep % 4) + 1;
@@ -414,6 +412,15 @@ export default function Home() {
         : deviceMessageKind === "unsupported" ? t.deviceUnsupported
           : deviceMessageKind === "failed" ? t.deviceFailed
             : t.deviceIdle;
+  const statusFor = (instrumentId: InstrumentId): SampleStatus => sampleStatus[instrumentId] ?? "idle";
+  const statusLabel = (instrumentId: InstrumentId) => {
+    const status = statusFor(instrumentId);
+    return status === "ready" ? t.cachedSample : status === "loading" ? `${t.loading}${sampleProgress[instrumentId] !== undefined ? ` · ${sampleProgress[instrumentId]}%` : ""}` : status === "fallback" ? t.fallbackActive : status === "error" ? t.sampleError : t.loadOnDemand;
+  };
+  const statusIcon = (instrumentId: InstrumentId) => {
+    const status = statusFor(instrumentId);
+    return status === "ready" ? "✓" : status === "loading" ? "◌" : status === "fallback" ? "≈" : status === "error" ? "!" : "↓";
+  };
 
   const changeLocale = useCallback((nextLocale: Locale) => {
     setLocale(nextLocale);
@@ -475,46 +482,54 @@ export default function Home() {
     return context;
   }, [masterVolume]);
 
-  const loadSampleInstrument = useCallback((preset: Instrument, announce = true) => {
+  const loadSampleInstrument = useCallback((preset: Instrument, announce = true, force = false) => {
     const sample = preset.sample;
-    if (!sample) return Promise.resolve([] as SampleAnchor[]);
     const cached = sampleAnchorsRef.current.get(preset.id);
-    if (cached) return Promise.resolve(cached);
+    if (cached && !force) return Promise.resolve(cached);
     const pending = samplePromisesRef.current.get(preset.id);
     if (pending) return pending;
 
+    if (force) {
+      sampleAnchorsRef.current.delete(preset.id);
+      sampleCatalogRef.current.delete(preset.id);
+      exactSampleBuffersRef.current.delete(preset.id);
+    }
+
     setSampleStatus((status) => ({ ...status, [preset.id]: "loading" }));
+    setSampleProgress((progress) => ({ ...progress, [preset.id]: 0 }));
     const promise = (async () => {
       try {
         const context = ensureAudio();
         let anchors: SampleAnchor[];
         if (sample.kind === "audio") {
-          const response = await fetch(sample.asset);
-          if (!response.ok) throw new Error("Sample request failed");
-          const buffer = await context.decodeAudioData(await response.arrayBuffer());
-          anchors = [{ note: sample.rootNote ?? 69, buffer }];
+          const controller = new AbortController();
+          const timeout = window.setTimeout(() => controller.abort(), 15_000);
+          try {
+            const response = await fetch(sample.asset, { signal: controller.signal });
+            if (!response.ok) throw new Error("Sample request failed");
+            const buffer = await context.decodeAudioData(await response.arrayBuffer());
+            setSampleProgress((progress) => ({ ...progress, [preset.id]: 100 }));
+            anchors = [{ note: sample.rootNote, buffer }];
+          } finally {
+            window.clearTimeout(timeout);
+          }
         } else {
-          const response = await fetch(`${FLUID_SOUNDFONT_BASE}/${sample.asset}-mp3.js`);
-          if (!response.ok) throw new Error("SoundFont request failed");
-          const javascript = await response.text();
-          const objectStart = javascript.indexOf("{", javascript.indexOf("="));
-          const objectEnd = javascript.lastIndexOf("}");
-          if (objectStart < 0 || objectEnd <= objectStart) throw new Error("Invalid SoundFont data");
-          const samples = JSON.parse(javascript.slice(objectStart, objectEnd + 1)) as Record<string, string>;
-          const available = Object.entries(samples).map(([key, data]) => ({ note: soundfontKeyToMidi(key), data })).filter((item): item is { note: number; data: string } => item.note !== null);
-          const chosen = new Map<number, string>();
-          SAMPLE_ANCHOR_NOTES.forEach((target) => {
-            const nearest = available.reduce((best, item) => Math.abs(item.note - target) < Math.abs(best.note - target) ? item : best, available[0]);
-            if (nearest) chosen.set(nearest.note, nearest.data);
-          });
-          anchors = await Promise.all(Array.from(chosen, async ([note, data]) => ({ note, buffer: await context.decodeAudioData(decodeDataUrl(data)) })));
+          const javascript = await fetchSoundfontText(sample, { force, timeoutMs: 15_000, onProgress: (value) => {
+            if (value !== null) setSampleProgress((progress) => ({ ...progress, [preset.id]: value }));
+          } });
+          const catalog = parseMidiJsSoundfont(javascript);
+          if (catalog.length < sample.expectedNotes) throw new Error(`Incomplete SoundFont: ${catalog.length}/${sample.expectedNotes}`);
+          sampleCatalogRef.current.set(preset.id, catalog);
+          anchors = await decodeSoundfontAnchors(catalog, (entry) => context.decodeAudioData(dataUrlToArrayBuffer(entry.dataUrl)));
+          exactSampleBuffersRef.current.set(preset.id, new Map(anchors.map((anchor) => [anchor.note, anchor.buffer])));
         }
+        if (!anchors.length) throw new Error("No decodable sample anchors");
         sampleAnchorsRef.current.set(preset.id, anchors);
         setSampleStatus((status) => ({ ...status, [preset.id]: "ready" }));
         if (announce) notify(t.sampleLoaded(instrumentName(preset, locale)));
         return anchors;
       } catch {
-        setSampleStatus((status) => ({ ...status, [preset.id]: "error" }));
+        setSampleStatus((status) => ({ ...status, [preset.id]: force ? "error" : "fallback" }));
         if (announce) notify(t.sampleFailed(instrumentName(preset, locale)));
         return [];
       } finally {
@@ -524,6 +539,27 @@ export default function Home() {
     samplePromisesRef.current.set(preset.id, promise);
     return promise;
   }, [ensureAudio, locale, notify, t]);
+
+  const decodeExactSoundfontNote = useCallback((preset: Instrument, note: number) => {
+    if (preset.sample.kind !== "soundfont") return Promise.resolve(null);
+    const catalog = sampleCatalogRef.current.get(preset.id);
+    if (!catalog?.length) return Promise.resolve(null);
+    const entry = catalog.find((item) => item.note === note) ?? nearestSoundfontEntry(catalog, note);
+    if (!entry) return Promise.resolve(null);
+    const decoded = exactSampleBuffersRef.current.get(preset.id)?.get(entry.note);
+    if (decoded) return Promise.resolve(decoded);
+    const promiseKey = `${preset.id}:${entry.note}`;
+    const pending = exactSamplePromisesRef.current.get(promiseKey);
+    if (pending) return pending;
+    const promise = ensureAudio().decodeAudioData(dataUrlToArrayBuffer(entry.dataUrl)).then((buffer) => {
+      const buffers = exactSampleBuffersRef.current.get(preset.id) ?? new Map<number, AudioBuffer>();
+      buffers.set(entry.note, buffer);
+      exactSampleBuffersRef.current.set(preset.id, buffers);
+      return buffer;
+    }).catch(() => null).finally(() => exactSamplePromisesRef.current.delete(promiseKey));
+    exactSamplePromisesRef.current.set(promiseKey, promise);
+    return promise;
+  }, [ensureAudio]);
 
   const stopVoice = useCallback((key: string, fast = false) => {
     const voice = voicesRef.current.get(key);
@@ -539,9 +575,9 @@ export default function Home() {
     setVoiceCount(voicesRef.current.size);
   }, []);
 
-  const triggerNote = useCallback((note: number, velocity = 96, trackId = selectedTrackId, source: "live" | "sequence" = "live", durationSeconds?: number) => {
+  const triggerNote = useCallback((note: number, velocity = 96, trackId = selectedTrackId, source: "live" | "sequence" | "preview" = "live", durationSeconds?: number, presetOverride?: InstrumentId) => {
     const track = tracksRef.current.find((item) => item.id === trackId) ?? tracksRef.current[0];
-    if (!track || track.mute || (tracksRef.current.some((item) => item.solo) && !track.solo)) return "";
+    if (!track || (source !== "preview" && (track.mute || (tracksRef.current.some((item) => item.solo) && !track.solo)))) return "";
     const context = ensureAudio();
     const master = masterGainRef.current;
     if (!master) return "";
@@ -552,7 +588,7 @@ export default function Home() {
         heldNotesRef.current.delete(note);
       }
     }
-    const preset = instrumentById(track.instrument);
+    const preset = instrumentById(presetOverride ?? track.instrument);
     const key = `${source}-${trackId}-${note}-${context.currentTime}-${Math.random()}`;
     const now = context.currentTime;
     const gain = context.createGain();
@@ -582,8 +618,10 @@ export default function Home() {
       setCurrentStep(nextStep);
     };
 
-    if (preset.sample && sampleAnchors?.length) {
-      const anchor = sampleAnchors.reduce((best, item) => Math.abs(item.note - note) < Math.abs(best.note - note) ? item : best, sampleAnchors[0]);
+    if (sampleAnchors?.length) {
+      const exactBuffer = exactSampleBuffersRef.current.get(preset.id)?.get(note);
+      const anchor = exactBuffer ? { note, buffer: exactBuffer } : sampleAnchors.reduce((best, item) => Math.abs(item.note - note) < Math.abs(best.note - note) ? item : best, sampleAnchors[0]);
+      if (!exactBuffer) void decodeExactSoundfontNote(preset, note);
       const sampleSource = context.createBufferSource();
       sampleSource.buffer = anchor.buffer;
       sampleSource.playbackRate.value = 2 ** ((note - anchor.note) / 12);
@@ -608,7 +646,7 @@ export default function Home() {
       return key;
     }
 
-    if (preset.sample && sampleStatus[preset.id] !== "error") void loadSampleInstrument(preset, false);
+    if (sampleStatus[preset.id] !== "loading" && sampleStatus[preset.id] !== "fallback") void loadSampleInstrument(preset, false);
     const filter = context.createBiquadFilter();
     const oscillators = [context.createOscillator(), context.createOscillator()];
     const isPercussion = preset.id === "drums" || preset.id === "chinesePercussion";
@@ -639,7 +677,7 @@ export default function Home() {
       window.setTimeout(() => stopVoice(key), durationSeconds * 1000);
     }
     return key;
-  }, [commitTracks, ensureAudio, loadSampleInstrument, sampleStatus, selectedTrackId, stopVoice]);
+  }, [commitTracks, decodeExactSoundfontNote, ensureAudio, loadSampleInstrument, sampleStatus, selectedTrackId, stopVoice]);
 
   const releaseLiveNote = useCallback((note: number) => {
     heldNotesRef.current.delete(note);
@@ -777,7 +815,8 @@ export default function Home() {
     setSelectedTrackId(track.id);
     setSelectedNoteId(null);
     setModal(null);
-    if (instrument.sample) void loadSampleInstrument(instrument);
+    setOnboardingSoundChosen(true);
+    void loadSampleInstrument(instrument);
     notify(t.trackCreated(localizedName));
   }, [commitTracks, loadSampleInstrument, locale, notify, t]);
 
@@ -804,7 +843,7 @@ export default function Home() {
     setTracks((current) => current.map((track) => ({ ...track, arm: track.id === trackId ? !track.arm : false })));
     setSelectedTrackId(trackId);
     const preset = instrumentById(tracksRef.current.find((track) => track.id === trackId)?.instrument ?? "grand");
-    if (preset.sample) void loadSampleInstrument(preset);
+    void loadSampleInstrument(preset);
   }, [loadSampleInstrument]);
 
   const deleteSelectedTrack = useCallback(() => {
@@ -821,15 +860,43 @@ export default function Home() {
     const instrument = instrumentById(instrumentId);
     const localizedName = instrumentName(instrument, locale);
     updateTrack(selectedTrackId, { instrument: instrumentId, color: instrument.color, name: locale === "en" ? localizedName.toUpperCase() : localizedName }, true);
-    if (instrument.sample) void loadSampleInstrument(instrument);
+    setOnboardingSoundChosen(true);
+    void loadSampleInstrument(instrument);
   }, [loadSampleInstrument, locale, selectedTrackId, updateTrack]);
 
   const selectTrack = useCallback((track: Track) => {
     setSelectedTrackId(track.id);
     setSelectedNoteId(null);
     const preset = instrumentById(track.instrument);
-    if (preset.sample) void loadSampleInstrument(preset);
+    void loadSampleInstrument(preset);
   }, [loadSampleInstrument]);
+
+  const auditionInstrument = useCallback((instrument: Instrument) => {
+    triggerNote(instrument.id === "bass" ? 48 : instrument.id === "drums" || instrument.id === "chinesePercussion" ? 36 : 60, 104, selectedTrackId, "preview", .8, instrument.id);
+  }, [selectedTrackId, triggerNote]);
+
+  const retryInstrumentSample = useCallback((instrument: Instrument) => {
+    void loadSampleInstrument(instrument, true, true);
+  }, [loadSampleInstrument]);
+
+  const checkAllInstrumentSamples = useCallback(async () => {
+    if (soundCheckRunning) return;
+    setSoundCheckRunning(true);
+    setSoundCheckProgress(0);
+    let ready = 0;
+    for (let index = 0; index < INSTRUMENTS.length; index += 1) {
+      const anchors = await loadSampleInstrument(INSTRUMENTS[index], false);
+      if (anchors.length) ready += 1;
+      setSoundCheckProgress(index + 1);
+    }
+    setSoundCheckRunning(false);
+    notify(t.sampleCheckComplete(ready));
+  }, [loadSampleInstrument, notify, soundCheckRunning, t]);
+
+  const dismissOnboarding = useCallback(() => {
+    setOnboardingVisible(false);
+    localStorage.setItem(ONBOARDING_STORAGE_KEY, "complete");
+  }, []);
 
   const addEditorNote = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest(".roll-note")) return;
@@ -954,6 +1021,11 @@ export default function Home() {
       setLocale(nextLocale);
       document.documentElement.lang = nextLocale === "zh" ? "zh-CN" : "en";
     }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setOnboardingVisible(localStorage.getItem(ONBOARDING_STORAGE_KEY) !== "complete"), 0);
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -1089,22 +1161,37 @@ export default function Home() {
         </div>
       </section>
 
+      {onboardingVisible && <aside className={`onboarding-coach ${onboardingComplete ? "complete" : ""}`} aria-label={t.firstLoop}>
+        <div className="coach-heading">
+          <div><span>{t.startHere.toUpperCase()}</span><strong>{t.firstLoop}</strong><p>{t.beginnerHint}</p></div>
+          <button onClick={dismissOnboarding} aria-label={t.hideCoach} title={t.hideCoach}>×</button>
+        </div>
+        <div className="coach-steps">
+          <button className={onboardingSoundChosen ? "done" : ""} onClick={() => setMobilePanel("library")}><i>{onboardingSoundChosen ? "✓" : "1"}</i><span>{t.chooseASound}</span><b>→</b></button>
+          <button className={onboardingInputReady ? "done" : ""} onClick={() => { stepInputRef.current = true; setStepInput(true); }}><i>{onboardingInputReady ? "✓" : "2"}</i><span>{t.enableInput}</span><b>→</b></button>
+          <button className={onboardingPlayed ? "done" : ""} onClick={() => document.querySelector<HTMLButtonElement>(".piano-key.white")?.focus()}><i>{onboardingPlayed ? "✓" : "3"}</i><span>{t.playFirstNote}</span><b>♪</b></button>
+        </div>
+        {onboardingComplete && <button className="coach-finish" onClick={dismissOnboarding}>✓ {t.onboardingDone}</button>}
+      </aside>}
+
       <section className="workspace">
         <aside className={`library-panel ${mobilePanel === "library" ? "mobile-open" : ""}`}>
-          <div className="panel-heading"><div><span>{t.browser.toUpperCase()}</span><strong>{t.libraryTitle}</strong></div><button className="panel-close" onClick={() => setMobilePanel(null)} aria-label={t.closePanel}>×</button></div>
+          <div className="panel-heading"><div><span>{t.browser.toUpperCase()}</span><strong>{t.libraryTitle}</strong></div><div className="panel-heading-actions"><button className="sound-check-trigger" onClick={() => setModal("sound-check")} aria-label={t.openSoundCheck} title={t.soundCheck}>✓ 17</button><button className="panel-close" onClick={() => setMobilePanel(null)} aria-label={t.closePanel}>×</button></div></div>
           <div className="instrument-library">
             <div className="library-group"><span>{t.studioCollection.toUpperCase()} · {CORE_INSTRUMENTS.length}</span></div>
-            {CORE_INSTRUMENTS.map((instrument) => (
-              <button key={instrument.id} className={selectedTrack?.instrument === instrument.id ? "selected" : ""} onClick={() => { changeInstrument(instrument.id); setMobilePanel(null); }}>
-                <i style={{ background: instrument.color }}>{instrument.icon}</i><span><strong>{instrumentName(instrument, locale)}</strong><small>{instrumentFamily(instrument, locale)}</small></span><b>›</b>
+            {CORE_INSTRUMENTS.map((instrument) => <div className={`instrument-row ${selectedTrack?.instrument === instrument.id ? "selected" : ""}`} data-instrument-id={instrument.id} data-sample-status={statusFor(instrument.id)} key={instrument.id}>
+              <button className="instrument-select" onClick={() => { changeInstrument(instrument.id); setMobilePanel(null); }}>
+                <i style={{ background: instrument.color }}>{instrument.icon}</i><span><strong>{instrumentName(instrument, locale)}</strong><small>{instrumentFamily(instrument, locale)} · {statusLabel(instrument.id)}</small></span><b className={statusFor(instrument.id)}>{statusIcon(instrument.id)}</b>
               </button>
-            ))}
+              <button className="instrument-preview" onClick={() => auditionInstrument(instrument)} aria-label={`${t.previewSound} · ${instrumentName(instrument, locale)}`} title={t.previewSound}>▶</button>
+            </div>)}
             <div className="library-group chinese"><span>{t.chineseCollection.toUpperCase()} · {CHINESE_INSTRUMENTS.length}</span><div><button onClick={() => setModal("samples")}>{t.credits}</button><button onClick={addChineseSuite}>＋ {t.fullSuite}</button></div></div>
-            {CHINESE_INSTRUMENTS.map((instrument) => (
-              <button key={instrument.id} className={`${selectedTrack?.instrument === instrument.id ? "selected" : ""} sample-instrument`} onClick={() => { changeInstrument(instrument.id); setMobilePanel(null); }}>
-                <i style={{ background: instrument.color }}>{instrument.icon}</i><span><strong>{instrumentName(instrument, locale)}</strong><small>{instrumentFamily(instrument, locale)} · {sampleStatus[instrument.id] === "ready" ? t.ready : sampleStatus[instrument.id] === "loading" ? t.loading : sampleStatus[instrument.id] === "error" ? t.synthFallback : t.loadOnDemand}</small></span><b className={sampleStatus[instrument.id] ?? "idle"}>{sampleStatus[instrument.id] === "loading" ? "◌" : sampleStatus[instrument.id] === "ready" ? "●" : "↓"}</b>
+            {CHINESE_INSTRUMENTS.map((instrument) => <div className={`instrument-row sample-instrument ${selectedTrack?.instrument === instrument.id ? "selected" : ""}`} data-instrument-id={instrument.id} data-sample-status={statusFor(instrument.id)} key={instrument.id}>
+              <button className="instrument-select" onClick={() => { changeInstrument(instrument.id); setMobilePanel(null); }}>
+                <i style={{ background: instrument.color }}>{instrument.icon}</i><span><strong>{instrumentName(instrument, locale)}</strong><small>{instrumentFamily(instrument, locale)} · {statusLabel(instrument.id)}</small></span><b className={statusFor(instrument.id)}>{statusIcon(instrument.id)}</b>
               </button>
-            ))}
+              <button className="instrument-preview" onClick={() => auditionInstrument(instrument)} aria-label={`${t.previewSound} · ${instrumentName(instrument, locale)}`} title={t.previewSound}>▶</button>
+            </div>)}
           </div>
         </aside>
 
@@ -1187,7 +1274,7 @@ export default function Home() {
 
           <div className="performance-panel">
             <div className="performance-strip">
-              <div><span>{t.liveInput.toUpperCase()}</span><strong>{instrumentName(selectedInstrument, locale)}</strong><small>{selectedInstrument.sample ? `${selectedInstrument.sample.source} · ${sampleStatus[selectedInstrument.id] === "ready" ? t.sampleReady.toUpperCase() : sampleStatus[selectedInstrument.id] === "loading" ? t.loading.toUpperCase() : t.playToLoad.toUpperCase()}` : connection === "connected" ? deviceName : t.computerKeys.toUpperCase()}</small></div>
+              <div><span>{t.liveInput.toUpperCase()}</span><strong>{instrumentName(selectedInstrument, locale)}</strong><small>{selectedInstrument.sample.source} · {statusLabel(selectedInstrument.id).toUpperCase()}</small></div>
               <div className="note-monitor"><b>{lastNote === null ? "—" : noteName(lastNote)}</b><span>{t.note.toUpperCase()}</span></div>
               <div className="velocity-monitor"><span>{t.velocity.toUpperCase()} <b>{String(lastVelocity).padStart(3, "0")}</b></span><i><b style={{ width: `${lastVelocity / 127 * 100}%` }} /></i></div>
               <div className="octave-switch"><span>{t.octave.toUpperCase()}</span><button onClick={() => setOctave((value) => Math.max(2, value - 1))}>−</button><b>{octave}</b><button onClick={() => setOctave((value) => Math.min(6, value + 1))}>＋</button></div>
@@ -1225,7 +1312,7 @@ export default function Home() {
         </aside>
       </section>
 
-      <footer className="status-bar"><span><i className={connection === "connected" ? "online" : ""} /> {t.audioEngine.toUpperCase()} · 48 KHZ</span><span>{t.polyphony.toUpperCase()} {voiceCount}/64</span><span>MIDI RX {String(midiEventCount).padStart(4, "0")}</span><span>{t.autosave.toUpperCase()}</span><span className="cpu">CPU <i><b style={{ width: `${Math.min(90, 12 + voiceCount * 6)}%` }} /></i></span></footer>
+      <footer className="status-bar"><span><i className={connection === "connected" ? "online" : ""} /> {t.audioEngine.toUpperCase()} · 48 KHZ</span><button className="coach-toggle" onClick={() => setOnboardingVisible(true)}>◎ {t.startHere.toUpperCase()}</button><span>{t.polyphony.toUpperCase()} {voiceCount}/64</span><span>MIDI RX {String(midiEventCount).padStart(4, "0")}</span><span>{t.autosave.toUpperCase()}</span><span className="cpu">CPU <i><b style={{ width: `${Math.min(90, 12 + voiceCount * 6)}%` }} /></i></span></footer>
 
       {deviceDrawer && <div className="scrim" onPointerDown={() => setDeviceDrawer(false)} />}
       <aside className={`device-drawer ${deviceDrawer ? "open" : ""}`} aria-hidden={!deviceDrawer}>
@@ -1238,12 +1325,12 @@ export default function Home() {
       </aside>
 
       {modal && <div className="modal-backdrop" role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) setModal(null); }}>
-        <section className={`modal-card modal-${modal}`} role="dialog" aria-modal="true" aria-label={modal === "new-track" ? t.chooseInstrument : modal === "audio" ? t.audioRecordingSettings : modal === "shortcuts" ? t.keyCommands : modal === "export" ? t.takeYourMusic : t.sampleCredits}>
+        <section className={`modal-card modal-${modal}`} role="dialog" aria-modal="true" aria-label={modal === "new-track" ? t.chooseInstrument : modal === "audio" ? t.audioRecordingSettings : modal === "shortcuts" ? t.keyCommands : modal === "export" ? t.takeYourMusic : modal === "sound-check" ? t.soundCheckTitle : t.sampleCredits}>
           <button className="modal-close" onClick={() => setModal(null)} aria-label={t.closePanel}>×</button>
           {modal === "new-track" && <>
             <div className="modal-title"><span>{t.addTrack.toUpperCase()}</span><h2>{t.chooseInstrument}</h2><p>{t.sharedKeyboardHelp}</p></div>
             <button className="suite-action" onClick={addChineseSuite}><span><b>{t.chineseSuite}</b><small>{t.chineseSuiteList}</small></span><strong>＋ {t.addEightTracks}</strong></button>
-            <div className="instrument-grid">{INSTRUMENTS.map((instrument) => <button key={instrument.id} onClick={() => addTrack(instrument.id)}><i style={{ background: instrument.color }}>{instrument.icon}</i><span><strong>{instrumentName(instrument, locale)}</strong><small>{instrumentFamily(instrument, locale)}{instrument.sample ? ` · ${t.sampleBadge.toUpperCase()}` : ""}</small></span><b>＋</b></button>)}</div>
+            <div className="instrument-grid">{INSTRUMENTS.map((instrument) => <button key={instrument.id} onClick={() => addTrack(instrument.id)}><i style={{ background: instrument.color }}>{instrument.icon}</i><span><strong>{instrumentName(instrument, locale)}</strong><small>{instrumentFamily(instrument, locale)} · {t.sampleBadge.toUpperCase()}</small></span><b>＋</b></button>)}</div>
           </>}
           {modal === "audio" && <>
             <div className="modal-title"><span>{t.settings.toUpperCase()}</span><h2>{t.audioRecordingSettings}</h2><p>{t.lowLatencyHelp}</p></div>
@@ -1268,6 +1355,26 @@ export default function Home() {
             <div className="modal-title"><span>{t.sampleCredits.toUpperCase()}</span><h2>{t.sampleSuiteTitle}</h2><p>{t.sampleCreditsHelp}</p></div>
             <div className="sample-credit-list"><div><i style={{ background: "#dd7f6f" }}>胡</i><span><strong>{instrumentName(instrumentById("erhu"), locale)}</strong><small>{t.erhuPerformance}</small></span><b>Berklee BISA<br />CC BY 4.0</b></div><div><i style={{ background: "#e7bd62" }}>采</i><span><strong>{t.remainingSeven}</strong><small>{t.soundfontMapping}</small></span><b>FluidR3 GM<br />CC BY 3.0</b></div></div>
             <div className="sample-links"><a href="https://remix.berklee.edu/bisa-chinese-erhu/" target="_blank" rel="noreferrer">{t.berkleeSource} ↗</a><a href="https://github.com/gleitz/midi-js-soundfonts" target="_blank" rel="noreferrer">{t.fluidSource} ↗</a></div><button className="primary-action" onClick={() => setModal(null)}>{t.done}</button>
+          </>}
+          {modal === "sound-check" && <>
+            <div className="modal-title sound-check-title"><span>{t.soundCheck.toUpperCase()}</span><h2>{t.soundCheckTitle}</h2><p>{t.soundCheckHelp}</p></div>
+            <div className="sound-check-summary">
+              <div><strong>{soundCheckProgress}/{INSTRUMENTS.length}</strong><span>{soundCheckRunning ? t.checkingAll : `${INSTRUMENTS.filter((instrument) => statusFor(instrument.id) === "ready").length} ${t.ready.toUpperCase()}`}</span></div>
+              <i><b style={{ width: `${soundCheckProgress / INSTRUMENTS.length * 100}%` }} /></i>
+              <button onClick={() => void checkAllInstrumentSamples()} disabled={soundCheckRunning}>{soundCheckRunning ? t.checkingAll : t.checkAll}</button>
+            </div>
+            <div className="sound-check-list">
+              {INSTRUMENTS.map((instrument) => {
+                const status = statusFor(instrument.id);
+                return <div className="sound-check-row" data-sound-check-id={instrument.id} data-sample-status={status} key={instrument.id}>
+                  <i style={{ background: instrument.color }}>{instrument.icon}</i>
+                  <span><strong>{instrumentName(instrument, locale)}</strong><small>{instrument.sample.asset} · {instrument.sample.license}</small></span>
+                  <b className={`sample-state ${status}`}>{statusIcon(instrument.id)} {statusLabel(instrument.id)}</b>
+                  <button onClick={() => auditionInstrument(instrument)} aria-label={`${t.previewSound} · ${instrumentName(instrument, locale)}`}>▶ {t.previewSound}</button>
+                  {(status === "fallback" || status === "error") && <button className="retry-sample" onClick={() => retryInstrumentSample(instrument)}>↻ {t.retrySample}</button>}
+                </div>;
+              })}
+            </div>
           </>}
         </section>
       </div>}

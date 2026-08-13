@@ -33,7 +33,7 @@ const COPY = {
     quickTitle: "60 秒快速开始",
     quickIntro: "不接 MIDI 设备也可以完成这套流程。电脑键盘 A–K 和屏幕钢琴都能直接演奏。",
     quickSteps: [
-      ["01", "选择音轨与音色", "在编曲区点选音轨，再从左侧音色库选择乐器。所有输入都会进入当前选中的音轨。"],
+      ["01", "选择音轨与音色", "在编曲区点选音轨，再从左侧音色库选择乐器。可先点每件乐器右侧的 ▶ 试听；所有输入都会进入当前选中的音轨。"],
       ["02", "定位播放头", "点击编曲时间线或音轨区域，把红色播放头移动到想要开始的位置。"],
       ["03", "开启步进输入", "在钢琴卷帘上方点亮“步进输入”，然后演奏屏幕键盘、A–K 或 MIDI 键盘。"],
       ["04", "编辑与播放", "每次按键会写入一个 1/16 音符并自动前进。按 Space 播放，点音符后可量化、复制或删除。"],
@@ -54,14 +54,14 @@ const COPY = {
     workspaceTitle: "重新排版后的工作台",
     workspaceIntro: "每类任务只保留一个明确位置，避免音轨、音色与混音控件在多个区域重复出现。",
     zones: [
-      ["01", "左侧 · 音色库", "只负责浏览和更换音色，包括 9 件录音室乐器与 8 件国风采样乐器。"],
+      ["01", "左侧 · 音色库", "浏览和更换 17 件采样乐器。↓ 表示等待首次下载，◌ 表示加载中，✓ 表示已缓存，≈ 表示正在安全使用合成回退。"],
       ["02", "上方 · 编曲时间线", "音轨的唯一管理区域：选择、静音、独奏、待录、新增与定位播放头。"],
       ["03", "中部 · 钢琴卷帘", "查看和编辑当前音轨的音符，并切换步进输入。"],
       ["04", "下方 · 共享键盘", "所有音轨共用这一套 61 键输入，切换音轨后无需重新绑定。"],
       ["05", "右侧 · 通道条", "只保留当前音轨的声像、音量、静音、独奏、待录和删除。"],
     ],
     details: [
-      ["SOUNDS", "音色与国风采样", "选择音色会替换当前音轨的乐器，不会新建重复音轨。要叠加多个乐器，请在编曲区点“添加”。国风乐器首次演奏时按需加载公开采样，离线时自动使用合成音色。"],
+      ["SOUNDS", "采样状态与音色检查", "所有 17 件乐器首次使用都会立即以合成音色发声，并在后台下载约 1.7–3 MB 的公开高清采样。采样原始响应会保存在浏览器缓存。点音色库标题旁的“✓ 17”可逐件试听、重试，或主动检查全部；全量检查约需 30–45 MB，不会在启动时自动执行。"],
       ["TRANSPORT", "播放、节拍器与循环", "顶部传输栏控制播放、录音、BPM、节拍器、预备拍、循环和主音量。红色播放头在编曲区与钢琴卷帘中保持同一位置。"],
       ["PROJECT", "编辑、保存与导出", "编辑支持撤销与重做。工程可保存到本机，也可导出标准 MIDI 或 TupTup JSON 工程包；演奏和导出都在浏览器本地完成。"],
     ],
@@ -71,7 +71,8 @@ const COPY = {
     faq: [
       ["按键会响，但卷帘里没有音符？", "确认当前音轨已选中，并开启“步进输入”；或者把音轨设为待录后开始实时录音。普通演奏只发声，不会自动写入。"],
       ["MIDI 键盘没有反应？", "使用桌面版 Chrome 或 Edge，在 HTTPS 正式站点点击“连接设备”并允许 MIDI 权限。嵌入式预览通常无法访问 USB。"],
-      ["为什么国风音色第一次稍慢？", "公开采样按需下载并在当前浏览器会话中缓存。加载期间仍可用内置合成音色演奏。"],
+      ["为什么音色第一次会显示“合成回退”？", "第一颗音符优先立即发声，同时后台下载约 1.7–3 MB 的公开采样。原始音色会持久缓存在此浏览器；网络超时、离线或解码失败时，稳定的合成回退始终可用。"],
+      ["如何确认全部 17 件乐器都正常？", "打开左侧音色库标题旁的“✓ 17”，可逐件试听或点“检查全部 17 件乐器”。全量检查约需 30–45 MB，并显示每件乐器的加载、缓存或回退状态。"],
       ["键盘或音轨为什么不会再乱跳？", "键盘和编辑区使用固定尺寸与独立滚动；按键反馈只改变颜色和阴影，不会改变按键尺寸或布局。"],
     ],
     privacy: "本地优先 · 不上传演奏数据", footer: "TupTup Studio 是面向浏览器的多轨 MIDI 工作站。",
@@ -83,7 +84,7 @@ const COPY = {
     quickTitle: "60-second quick start",
     quickIntro: "No MIDI hardware is required. The computer keys A–K and the on-screen piano can both play and enter notes.",
     quickSteps: [
-      ["01", "Choose a track and sound", "Select a track in the arrangement, then choose an instrument from the library. Input always goes to the selected track."],
+      ["01", "Choose a track and sound", "Select a track in the arrangement, then choose an instrument from the library. Use the ▶ beside any instrument to preview it; input always goes to the selected track."],
       ["02", "Place the playhead", "Click the arrangement ruler or a track lane to move the red playhead to your starting point."],
       ["03", "Enable Step Input", "Turn on Step Input above the piano roll, then play the screen piano, A–K, or a MIDI keyboard."],
       ["04", "Edit and play", "Each key press writes a 1/16 note and advances one step. Press Space to play; select notes to quantize, duplicate, or delete."],
@@ -100,14 +101,14 @@ const COPY = {
     workspaceTitle: "The simplified workspace",
     workspaceIntro: "Each task now has one clear home, so tracks, sounds, and mix controls are not repeated across the interface.",
     zones: [
-      ["01", "Left · Sound Library", "Browse and change sounds, including 9 studio instruments and 8 Chinese sample instruments."],
+      ["01", "Left · Sound Library", "Browse and change all 17 sample instruments. ↓ means first download pending, ◌ loading, ✓ cached, and ≈ a safe synth fallback is active."],
       ["02", "Top · Arrangement", "The single place to select, mute, solo, arm, add tracks, and position the playhead."],
       ["03", "Middle · Piano Roll", "View and edit the selected track’s notes, and toggle Step Input."],
       ["04", "Bottom · Shared Keyboard", "Every track uses the same fixed 61-key input; switching tracks never requires rebinding."],
       ["05", "Right · Channel Strip", "Focused controls for the selected track: pan, volume, mute, solo, arm, and delete."],
     ],
     details: [
-      ["SOUNDS", "Sounds and Chinese samples", "Choosing a sound replaces the instrument on the selected track; it does not create a duplicate track. Use Add to layer instruments. Chinese sounds load public samples on first play and fall back to synthesis offline."],
+      ["SOUNDS", "Sample status and Sound Check", "All 17 instruments respond instantly with synthesis on first use while an open HD sample of about 1.7–3 MB downloads in the background. Raw responses persist in the browser cache. Open “✓ 17” beside the library title to preview, retry, or explicitly check every sound. A full check uses about 30–45 MB and never runs at startup."],
       ["TRANSPORT", "Playback, metronome, and loop", "The top transport controls playback, recording, BPM, metronome, count-in, loop, and master volume. The red playhead stays aligned between the arrangement and piano roll."],
       ["PROJECT", "Editing, saving, and export", "Edits support undo and redo. Save locally, export Standard MIDI, or download a TupTup JSON project bundle. Performance and export stay in your browser."],
     ],
@@ -117,7 +118,8 @@ const COPY = {
     faq: [
       ["Keys make sound, but no notes appear?", "Select the target track and enable Step Input, or arm the track and start live recording. Normal playing produces sound without writing notes."],
       ["The MIDI keyboard does not respond?", "Use desktop Chrome or Edge, open the HTTPS live site, choose Connect Device, and grant MIDI permission. Embedded previews often cannot access USB."],
-      ["Why is a Chinese sound slower the first time?", "Public samples are downloaded on demand and cached for the browser session. The built-in synth remains available while loading."],
+      ["Why does a sound show “Synth Fallback” at first?", "The first note plays immediately while an open sample of about 1.7–3 MB downloads in the background. Raw sounds persist in this browser; the stable synth fallback remains playable after a timeout, offline request, or decode failure."],
+      ["How do I verify all 17 instruments?", "Open “✓ 17” beside the Sound Library title. Preview sounds one by one or choose Check All 17 Instruments. A full check uses about 30–45 MB and shows the load, cache, or fallback result for each instrument."],
       ["Why do the keyboard and tracks stay stable now?", "The keyboard and editors use fixed geometry with independent scrolling. Key feedback changes only color and shadow, never size or layout."],
     ],
     privacy: "LOCAL FIRST · PERFORMANCE DATA IS NOT UPLOADED", footer: "TupTup Studio is a multitrack MIDI workstation for the browser.",

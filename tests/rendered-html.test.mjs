@@ -47,10 +47,11 @@ test("server-renders the standalone bilingual feature guide", async () => {
   assert.match(html, /返回工作台/);
 });
 
-test("keeps the public metadata and MIDI privacy promise", async () => {
-  const [layout, page, readme, license, sampleCredits, erhuSample] = await Promise.all([
+test("keeps the public metadata, licensed sources, and MIDI privacy promise", async () => {
+  const [layout, page, soundfont, readme, license, sampleCredits, erhuSample] = await Promise.all([
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/soundfont.ts", import.meta.url), "utf8"),
     readFile(new URL("../README.md", import.meta.url), "utf8"),
     readFile(new URL("../LICENSE", import.meta.url), "utf8"),
     readFile(new URL("../THIRD_PARTY_SAMPLES.md", import.meta.url), "utf8"),
@@ -64,7 +65,9 @@ test("keeps the public metadata and MIDI privacy promise", async () => {
   assert.match(readme, /does not upload performance\s+data/i);
   assert.match(page, /guzheng/);
   assert.match(page, /chinesePercussion/);
-  assert.match(page, /FluidR3_GM/);
+  assert.match(soundfont, /FluidR3_GM/);
+  assert.match(soundfont, /acoustic_grand_piano/);
+  assert.match(soundfont, /taiko_drum/);
   assert.match(sampleCredits, /Berklee Intersectional Soundbox Archive/);
   assert.match(sampleCredits, /Creative Commons Attribution 4\.0/);
   assert.equal(erhuSample.subarray(0, 4).toString("ascii"), "RIFF");
@@ -72,7 +75,10 @@ test("keeps the public metadata and MIDI privacy promise", async () => {
 });
 
 test("ships a persistent Chinese and English interface for every instrument", async () => {
-  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const [page, soundfont] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/soundfont.ts", import.meta.url), "utf8"),
+  ]);
   const instrumentIds = [
     "grand", "electric", "pad", "bass", "lead", "organ", "marimba", "strings", "drums",
     "guzheng", "erhu", "pipa", "dizi", "yangqin", "suona", "sheng", "chinesePercussion",
@@ -86,6 +92,9 @@ test("ships a persistent Chinese and English interface for every instrument", as
   assert.match(page, /document\.documentElement\.lang/);
   assert.match(page, /Chinese Sample Suite/);
   assert.match(page, /国风采样套组/);
+  assert.match(page, /Check All 17 Instruments/);
+  assert.match(page, /完成你的第一段 Loop/);
+  assert.match(page, /data-sound-check-id/);
 
   for (const id of instrumentIds) {
     const instrumentLine = page.split("\n").find((line) => line.includes(`id: "${id}"`));
@@ -94,6 +103,7 @@ test("ships a persistent Chinese and English interface for every instrument", as
     assert.match(instrumentLine, /nameEn: ".+"/);
     assert.match(instrumentLine, /familyZh: ".+"/);
     assert.match(instrumentLine, /familyEn: ".+"/);
+    assert.match(soundfont, new RegExp(`\\b${id}:`), `missing sample mapping for ${id}`);
   }
 });
 
@@ -112,6 +122,9 @@ test("provides stable roll input from the shared 61-key keyboard", async () => {
   assert.doesNotMatch(page, /className="compact-track-list"/);
   assert.doesNotMatch(page, /className="library-tabs"/);
   assert.match(guide, /How does the keyboard add notes to the Piano Roll/);
+  assert.match(guide, /How do I verify all 17 instruments/);
   assert.match(guide, /A W S E D F T G Y H U J K/);
   assert.match(styles, /grid-template-rows: repeat\(61, 1fr\)/);
+  assert.doesNotMatch(styles, /\.piano-key\.white\.active\s*\{[^}]*transform/s);
+  assert.doesNotMatch(styles, /\.piano-key\.black\.active\s*\{[^}]*transform/s);
 });
