@@ -6,6 +6,12 @@
 A browser-based multitrack MIDI workstation for USB MIDI controllers, built
 for the **TupTup TS01-MIDI** and its **SAM5704** sound-module input.
 
+Song Mode v3 replaces the original fixed 32-step loop with a PPQ-480 song
+document, multi-clip arrangement, clip-focused Piano Roll, exact Web Audio
+scheduling, and long-song MIDI round-tripping. It remains a single-page,
+beginner-friendly workstation: the first key press always makes sound, even
+while HD samples are still loading.
+
 ![TupTup Studio preview](public/og-studio.png)
 
 ## Features
@@ -55,6 +61,40 @@ Open the local URL shown in the terminal, connect the controller over USB,
 choose **连接设备**, and approve the browser permission prompt.
 Use the **中 / EN** control in the header to switch the whole workstation language.
 
+## Make a first song
+
+1. Choose an instrument from the sound library. Use its **▶** button to preview
+   it; playing can begin immediately with the synth fallback.
+2. Double-click an empty track lane, or choose the pencil tool and click the
+   arrangement, to create a MIDI clip at the current grid.
+3. Select the clip to open it in the Piano Roll. Draw notes directly, or enable
+   **Step Input** and play the shared 61-key piano, computer keys **A–K**, or a
+   connected MIDI keyboard.
+4. For live recording, arm the target track with **●**, optionally enable the
+   one-bar count-in or loop, then press **R**. Loop recording overdubs each pass.
+5. Press **Space** to hear the full song. Drag clips to arrange them, drag their
+   edges to trim or loop-stretch, and use the clip toolbar to duplicate, split,
+   or delete them.
+6. Choose **Save** for local IndexedDB recovery, or **Export** for a standard
+   `.mid` file or a complete v3 `.tuptup.json` project bundle.
+
+The bottom keyboard is shared by live play, Step Input, and recording. Selecting
+or playing a note changes only color, shadow, and opacity—the keyboard, tracks,
+and Piano Roll keep their dimensions.
+
+### Editing model
+
+| Surface | What it edits |
+| --- | --- |
+| Arrangement | Song-positioned clips: create, select, move, trim, loop-stretch, duplicate, split, and delete |
+| Piano Roll | Notes inside the active clip: marquee, move, resize, transpose, nudge, velocity, quantize, and humanize |
+| Transport loop | Independent song playback/recording range; it does not rewrite clip content |
+| Clip loop | Repeats a clip's `contentLengthTicks` across its longer `displayLengthTicks` |
+
+Available grids are `1/4`, `1/8`, `1/16`, `1/32`, `1/8T`, and `1/16T`.
+Projects begin at 16 bars and extend in four-bar blocks whenever recording,
+editing, or MIDI import reaches beyond the current ending.
+
 ## How the TS01 connection works
 
 The controller exposes two CoreMIDI/Web MIDI inputs:
@@ -78,7 +118,7 @@ on the tested TS01 hardware, the physical piano keys send notes from
 | `npm run typecheck` | Run TypeScript without emitting files |
 | `npm run test:unit` | Test v3 migration, clips, long-song scheduling, MIDI round-trip, sample LRU, and SoundFonts |
 | `npm run audit:samples` | Download and validate every remote SoundFont plus the local erhu WAV |
-| `npm test` | Build and run the rendered-page tests |
+| `npm test` | Create a production build and run the complete rendered-page, Song Mode, MIDI, scheduler, cache, and SoundFont test suite |
 
 ## Architecture
 
@@ -89,6 +129,19 @@ on the tested TS01 hardware, the physical piano keys send notes from
 - Versioned Cache Storage for raw FluidR3 SoundFonts; decoded `AudioBuffer` objects use a 96 MB in-memory LRU
 - vinext and Cloudflare Workers for the application runtime
 - CSS for the responsive piano and performance feedback
+
+### Source map
+
+| Path | Responsibility |
+| --- | --- |
+| `components/StudioWorkbench.tsx` | Workstation UI, unified project history, gestures, transport, recording, and audio routing |
+| `lib/project.ts` | V3 types, v2 migration, tick/grid helpers, clip expansion/splitting, and song extension |
+| `lib/sequencer.ts` | Tick/second conversion and look-ahead scheduling windows, including loop boundaries |
+| `lib/midi.ts` | Long-song Standard MIDI import/export, running status, channel/program, tempo, meter, and drums |
+| `lib/project-store.ts` | IndexedDB current-project and recovery snapshots with a local fallback |
+| `lib/soundfont.ts` | Licensed 17-instrument source map, safe parser, cache, anchors, and fallback metadata |
+| `lib/audio-buffer-lru.ts` | Approximate 96 MB decoded-sample memory budget |
+| `app/guide/page.tsx` | Standalone bilingual user manual at `/guide` |
 
 ### Sample loading lifecycle
 
@@ -119,6 +172,12 @@ are migrated into a two-bar clip, and the original browser draft is left in
 place until the v3 save succeeds. Standard MIDI import preserves absolute song
 length, overlapping notes, channel/program data, drums, tempo, and meter;
 export expands looped clips and orders Note Off before same-tick Note On.
+
+| Import | Result |
+| --- | --- |
+| v2 `.tuptup.json` | Migrated non-destructively into one two-bar v3 clip per legacy track |
+| v3 `.tuptup.json` | Restored with clips, notes, instruments, mix, loop, BPM, and meter |
+| `.mid` / `.midi` | Imported at absolute length with separate MIDI channels and preserved musical metadata |
 
 Use **Sound Check** beside the sound-library heading to preview, retry, or
 explicitly check all 17 instruments. The full check uses roughly 30–45 MB and
