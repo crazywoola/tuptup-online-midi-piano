@@ -35,11 +35,13 @@ test("server-renders the TupTup Studio workstation", async () => {
 });
 
 test("keeps the public metadata and MIDI privacy promise", async () => {
-  const [layout, page, readme, license] = await Promise.all([
+  const [layout, page, readme, license, sampleCredits, erhuSample] = await Promise.all([
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../README.md", import.meta.url), "utf8"),
     readFile(new URL("../LICENSE", import.meta.url), "utf8"),
+    readFile(new URL("../THIRD_PARTY_SAMPLES.md", import.meta.url), "utf8"),
+    readFile(new URL("../public/samples/chinese/erhu-vibrato-a4.wav", import.meta.url)),
   ]);
 
   assert.match(layout, /og-studio\.png/);
@@ -47,5 +49,11 @@ test("keeps the public metadata and MIDI privacy promise", async () => {
   assert.match(page, /inputs\.map/);
   assert.match(readme, /SAM5704/);
   assert.match(readme, /does not upload performance\s+data/i);
+  assert.match(page, /guzheng/);
+  assert.match(page, /chinesePercussion/);
+  assert.match(page, /FluidR3_GM/);
+  assert.match(sampleCredits, /Berklee Intersectional Soundbox Archive/);
+  assert.match(sampleCredits, /Creative Commons Attribution 4\.0/);
+  assert.equal(erhuSample.subarray(0, 4).toString("ascii"), "RIFF");
   assert.match(license, /MIT License/);
 });

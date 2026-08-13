@@ -10,6 +10,8 @@ const KEYBOARD_HIGH = 96;
 const EDITOR_LOW = 48;
 const EDITOR_HIGH = 83;
 const STORAGE_KEY = "tuptup-studio-project-v2";
+const FLUID_SOUNDFONT_BASE = "https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM";
+const SAMPLE_ANCHOR_NOTES = [36, 42, 48, 54, 60, 66, 72, 78, 84, 90, 96];
 
 const KEYBOARD_MAP: Record<string, number> = {
   a: 0, w: 1, s: 2, e: 3, d: 4, f: 5, t: 6,
@@ -19,8 +21,16 @@ const KEYBOARD_MAP: Record<string, number> = {
 const NOTE_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
 
 type ConnectionState = "idle" | "searching" | "connected" | "missing" | "blocked" | "error";
-type ModalName = "new-track" | "audio" | "shortcuts" | "export" | null;
-type InstrumentId = "grand" | "electric" | "pad" | "bass" | "lead" | "organ" | "marimba" | "strings" | "drums";
+type ModalName = "new-track" | "audio" | "shortcuts" | "export" | "samples" | null;
+type InstrumentId = "grand" | "electric" | "pad" | "bass" | "lead" | "organ" | "marimba" | "strings" | "drums" | "guzheng" | "erhu" | "pipa" | "dizi" | "yangqin" | "suona" | "sheng" | "chinesePercussion";
+
+type SampleSpec = {
+  kind: "soundfont" | "audio";
+  asset: string;
+  rootNote?: number;
+  source: string;
+  license: string;
+};
 
 type Instrument = {
   id: InstrumentId;
@@ -34,6 +44,8 @@ type Instrument = {
   release: number;
   cutoff: number;
   program: number;
+  collection?: "chinese";
+  sample?: SampleSpec;
 };
 
 type NoteEvent = {
@@ -59,9 +71,14 @@ type Track = {
 };
 
 type Voice = {
-  oscillators: OscillatorNode[];
+  sources: AudioScheduledSourceNode[];
   gain: GainNode;
   release: number;
+};
+
+type SampleAnchor = {
+  note: number;
+  buffer: AudioBuffer;
 };
 
 const INSTRUMENTS: Instrument[] = [
@@ -74,7 +91,18 @@ const INSTRUMENTS: Instrument[] = [
   { id: "marimba", name: "Glass Marimba", family: "打击乐", icon: "◇", color: "#57e0ba", wave: "sine", overtone: "sine", attack: .004, release: .42, cutoff: 7000, program: 12 },
   { id: "strings", name: "Warm Ensemble", family: "弦乐", icon: "〰", color: "#ef9dff", wave: "sawtooth", overtone: "triangle", attack: .16, release: 1.2, cutoff: 2300, program: 48 },
   { id: "drums", name: "Pulse Kit", family: "鼓组", icon: "●", color: "#ff7a52", wave: "square", overtone: "sine", attack: .002, release: .2, cutoff: 6200, program: 0 },
+  { id: "guzheng", name: "流光古筝", family: "国风 · 弹拨", icon: "筝", color: "#e7bd62", wave: "triangle", overtone: "sine", attack: .004, release: 1.1, cutoff: 6800, program: 107, collection: "chinese", sample: { kind: "soundfont", asset: "koto", source: "FluidR3 GM", license: "CC BY 3.0" } },
+  { id: "erhu", name: "烟雨二胡", family: "国风 · 拉弦", icon: "胡", color: "#dd7f6f", wave: "sawtooth", overtone: "triangle", attack: .035, release: .7, cutoff: 3900, program: 110, collection: "chinese", sample: { kind: "audio", asset: "/samples/chinese/erhu-vibrato-a4.wav", rootNote: 69, source: "Berklee BISA", license: "CC BY 4.0" } },
+  { id: "pipa", name: "飞花琵琶", family: "国风 · 弹拨", icon: "琵", color: "#f29b63", wave: "triangle", overtone: "square", attack: .003, release: .65, cutoff: 6200, program: 106, collection: "chinese", sample: { kind: "soundfont", asset: "shamisen", source: "FluidR3 GM", license: "CC BY 3.0" } },
+  { id: "dizi", name: "清风竹笛", family: "国风 · 吹管", icon: "笛", color: "#64d9ad", wave: "sine", overtone: "triangle", attack: .035, release: .52, cutoff: 7200, program: 73, collection: "chinese", sample: { kind: "soundfont", asset: "flute", source: "FluidR3 GM", license: "CC BY 3.0" } },
+  { id: "yangqin", name: "星河扬琴", family: "国风 · 击弦", icon: "扬", color: "#7fc5ef", wave: "triangle", overtone: "sine", attack: .003, release: .9, cutoff: 7500, program: 15, collection: "chinese", sample: { kind: "soundfont", asset: "dulcimer", source: "FluidR3 GM", license: "CC BY 3.0" } },
+  { id: "suona", name: "赤焰唢呐", family: "国风 · 双簧", icon: "呐", color: "#ff646c", wave: "sawtooth", overtone: "square", attack: .016, release: .35, cutoff: 5600, program: 111, collection: "chinese", sample: { kind: "soundfont", asset: "shanai", source: "FluidR3 GM", license: "CC BY 3.0" } },
+  { id: "sheng", name: "云岫笙", family: "国风 · 簧管", icon: "笙", color: "#b7a0ff", wave: "sine", overtone: "square", attack: .028, release: .65, cutoff: 5100, program: 20, collection: "chinese", sample: { kind: "soundfont", asset: "reed_organ", source: "FluidR3 GM", license: "CC BY 3.0" } },
+  { id: "chinesePercussion", name: "醒狮锣鼓", family: "国风 · 打击乐", icon: "鼓", color: "#ffcc4f", wave: "square", overtone: "sine", attack: .002, release: .32, cutoff: 6600, program: 116, collection: "chinese", sample: { kind: "soundfont", asset: "taiko_drum", source: "FluidR3 GM", license: "CC BY 3.0" } },
 ];
+
+const CORE_INSTRUMENTS = INSTRUMENTS.filter((instrument) => instrument.collection !== "chinese");
+const CHINESE_INSTRUMENTS = INSTRUMENTS.filter((instrument) => instrument.collection === "chinese");
 
 const INITIAL_TRACKS: Track[] = [
   {
@@ -104,6 +132,23 @@ const KEY_HINTS = Object.fromEntries(Object.entries(KEYBOARD_MAP).map(([key, off
 
 function noteName(note: number) {
   return `${NOTE_NAMES[note % 12]}${Math.floor(note / 12) - 1}`;
+}
+
+function soundfontKeyToMidi(key: string) {
+  const match = /^([A-G])([b#]?)(-?\d+)$/.exec(key);
+  if (!match) return null;
+  const naturalNotes: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+  const natural = naturalNotes[match[1]];
+  const accidental = match[2] === "b" ? -1 : match[2] === "#" ? 1 : 0;
+  return (Number(match[3]) + 1) * 12 + natural + accidental;
+}
+
+function decodeDataUrl(dataUrl: string) {
+  const encoded = dataUrl.slice(dataUrl.indexOf(",") + 1);
+  const binary = window.atob(encoded);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes.buffer;
 }
 
 function isBlack(note: number) {
@@ -154,7 +199,7 @@ function makeMidi(tracks: Track[], bpm: number) {
   const tempo = Math.round(60000000 / bpm);
   const tempoData = [0x00, 0xff, 0x51, 0x03, ...intBytes(tempo, 3), 0x00, 0xff, 0x58, 0x04, 0x04, 0x02, 0x18, 0x08, 0x00, 0xff, 0x2f, 0x00];
   const midiTracks = tracks.map((track, trackIndex) => {
-    const channel = track.instrument === "drums" ? 9 : trackIndex % 9;
+    const channel = track.instrument === "drums" || track.instrument === "chinesePercussion" ? 9 : trackIndex % 9;
     const program = instrumentById(track.instrument).program;
     const events = track.notes.flatMap((note) => [
       { tick: note.start * stepTicks, order: 1, data: [0x90 | channel, note.note, note.velocity] },
@@ -264,6 +309,7 @@ export default function Home() {
   const [lastNote, setLastNote] = useState<number | null>(null);
   const [lastVelocity, setLastVelocity] = useState(0);
   const [voiceCount, setVoiceCount] = useState(0);
+  const [sampleStatus, setSampleStatus] = useState<Partial<Record<InstrumentId, "loading" | "ready" | "error">>>({});
   const [sustain, setSustainState] = useState(false);
   const [modal, setModal] = useState<ModalName>(null);
   const [deviceDrawer, setDeviceDrawer] = useState(false);
@@ -274,6 +320,8 @@ export default function Home() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const masterGainRef = useRef<GainNode | null>(null);
   const voicesRef = useRef(new Map<string, Voice>());
+  const sampleAnchorsRef = useRef(new Map<InstrumentId, SampleAnchor[]>());
+  const samplePromisesRef = useRef(new Map<InstrumentId, Promise<SampleAnchor[]>>());
   const liveVoiceKeysRef = useRef(new Map<number, string>());
   const heldNotesRef = useRef(new Set<number>());
   const sustainedNotesRef = useRef(new Set<number>());
@@ -355,6 +403,56 @@ export default function Home() {
     return context;
   }, [masterVolume]);
 
+  const loadSampleInstrument = useCallback((preset: Instrument, announce = true) => {
+    const sample = preset.sample;
+    if (!sample) return Promise.resolve([] as SampleAnchor[]);
+    const cached = sampleAnchorsRef.current.get(preset.id);
+    if (cached) return Promise.resolve(cached);
+    const pending = samplePromisesRef.current.get(preset.id);
+    if (pending) return pending;
+
+    setSampleStatus((status) => ({ ...status, [preset.id]: "loading" }));
+    const promise = (async () => {
+      try {
+        const context = ensureAudio();
+        let anchors: SampleAnchor[];
+        if (sample.kind === "audio") {
+          const response = await fetch(sample.asset);
+          if (!response.ok) throw new Error("Sample request failed");
+          const buffer = await context.decodeAudioData(await response.arrayBuffer());
+          anchors = [{ note: sample.rootNote ?? 69, buffer }];
+        } else {
+          const response = await fetch(`${FLUID_SOUNDFONT_BASE}/${sample.asset}-mp3.js`);
+          if (!response.ok) throw new Error("SoundFont request failed");
+          const javascript = await response.text();
+          const objectStart = javascript.indexOf("{", javascript.indexOf("="));
+          const objectEnd = javascript.lastIndexOf("}");
+          if (objectStart < 0 || objectEnd <= objectStart) throw new Error("Invalid SoundFont data");
+          const samples = JSON.parse(javascript.slice(objectStart, objectEnd + 1)) as Record<string, string>;
+          const available = Object.entries(samples).map(([key, data]) => ({ note: soundfontKeyToMidi(key), data })).filter((item): item is { note: number; data: string } => item.note !== null);
+          const chosen = new Map<number, string>();
+          SAMPLE_ANCHOR_NOTES.forEach((target) => {
+            const nearest = available.reduce((best, item) => Math.abs(item.note - target) < Math.abs(best.note - target) ? item : best, available[0]);
+            if (nearest) chosen.set(nearest.note, nearest.data);
+          });
+          anchors = await Promise.all(Array.from(chosen, async ([note, data]) => ({ note, buffer: await context.decodeAudioData(decodeDataUrl(data)) })));
+        }
+        sampleAnchorsRef.current.set(preset.id, anchors);
+        setSampleStatus((status) => ({ ...status, [preset.id]: "ready" }));
+        if (announce) notify(`${preset.name} 采样已就绪`);
+        return anchors;
+      } catch {
+        setSampleStatus((status) => ({ ...status, [preset.id]: "error" }));
+        if (announce) notify(`${preset.name} 加载失败，已使用合成音色`);
+        return [];
+      } finally {
+        samplePromisesRef.current.delete(preset.id);
+      }
+    })();
+    samplePromisesRef.current.set(preset.id, promise);
+    return promise;
+  }, [ensureAudio, notify]);
+
   const stopVoice = useCallback((key: string, fast = false) => {
     const voice = voicesRef.current.get(key);
     const context = audioContextRef.current;
@@ -362,8 +460,8 @@ export default function Home() {
     const now = context.currentTime;
     voice.gain.gain.cancelScheduledValues(now);
     voice.gain.gain.setTargetAtTime(.0001, now, fast ? .012 : Math.max(.03, voice.release / 4));
-    voice.oscillators.forEach((oscillator) => {
-      try { oscillator.stop(now + (fast ? .08 : voice.release)); } catch { /* already stopped */ }
+    voice.sources.forEach((source) => {
+      try { source.stop(now + (fast ? .08 : voice.release)); } catch { /* already stopped */ }
     });
     voicesRef.current.delete(key);
     setVoiceCount(voicesRef.current.size);
@@ -383,22 +481,57 @@ export default function Home() {
     const key = `${source}-${trackId}-${note}-${context.currentTime}-${Math.random()}`;
     const now = context.currentTime;
     const gain = context.createGain();
-    const filter = context.createBiquadFilter();
     const panner = context.createStereoPanner();
-    const oscillators = [context.createOscillator(), context.createOscillator()];
     const strength = Math.max(.06, velocity / 127);
-    const baseFrequency = preset.id === "drums" ? (note === 36 ? 74 : note === 38 ? 185 : 430) : noteFrequency(note);
+    const sampleAnchors = sampleAnchorsRef.current.get(preset.id);
+
+    if (preset.sample && sampleAnchors?.length) {
+      const anchor = sampleAnchors.reduce((best, item) => Math.abs(item.note - note) < Math.abs(best.note - note) ? item : best, sampleAnchors[0]);
+      const sampleSource = context.createBufferSource();
+      sampleSource.buffer = anchor.buffer;
+      sampleSource.playbackRate.value = 2 ** ((note - anchor.note) / 12);
+      panner.pan.value = track.pan / 100;
+      gain.gain.setValueAtTime(.0001, now);
+      gain.gain.exponentialRampToValueAtTime(.38 * strength * track.volume / 100, now + Math.max(.003, preset.attack));
+      sampleSource.connect(gain).connect(panner).connect(master);
+      sampleSource.start(now);
+      sampleSource.onended = () => {
+        if (voicesRef.current.get(key)?.sources.includes(sampleSource)) {
+          voicesRef.current.delete(key);
+          setVoiceCount(voicesRef.current.size);
+        }
+      };
+      voicesRef.current.set(key, { sources: [sampleSource], gain, release: preset.release });
+      setVoiceCount(voicesRef.current.size);
+      if (source === "live") {
+        liveVoiceKeysRef.current.set(note, key);
+        heldNotesRef.current.add(note);
+        setActiveNotes((notes) => new Set(notes).add(note));
+        setLastNote(note);
+        setLastVelocity(velocity);
+        if (recordingRef.current) recordStartsRef.current.set(note, { step: currentStepRef.current, trackId });
+      } else if (durationSeconds) {
+        window.setTimeout(() => stopVoice(key), durationSeconds * 1000);
+      }
+      return key;
+    }
+
+    if (preset.sample && sampleStatus[preset.id] !== "error") void loadSampleInstrument(preset, false);
+    const filter = context.createBiquadFilter();
+    const oscillators = [context.createOscillator(), context.createOscillator()];
+    const isPercussion = preset.id === "drums" || preset.id === "chinesePercussion";
+    const baseFrequency = isPercussion ? (note === 36 ? 74 : note === 38 ? 185 : 430) : noteFrequency(note);
     filter.type = "lowpass";
     filter.frequency.setValueAtTime(preset.cutoff * (.62 + strength * .52), now);
     filter.Q.value = preset.id === "bass" ? 4.2 : .8;
     panner.pan.value = track.pan / 100;
     gain.gain.setValueAtTime(.0001, now);
     gain.gain.exponentialRampToValueAtTime((preset.id === "pad" ? .06 : .11) * strength * track.volume / 100, now + preset.attack);
-    gain.gain.exponentialRampToValueAtTime((preset.id === "drums" ? .0002 : .045) * strength * track.volume / 100, now + (preset.id === "drums" ? .16 : Math.max(.28, preset.attack + .4)));
+    gain.gain.exponentialRampToValueAtTime((isPercussion ? .0002 : .045) * strength * track.volume / 100, now + (isPercussion ? .16 : Math.max(.28, preset.attack + .4)));
     oscillators[0].type = preset.wave;
     oscillators[0].frequency.setValueAtTime(baseFrequency, now);
     oscillators[1].type = preset.overtone;
-    oscillators[1].frequency.setValueAtTime(baseFrequency * (preset.id === "organ" ? 2 : preset.id === "drums" ? 1.65 : 2), now);
+    oscillators[1].frequency.setValueAtTime(baseFrequency * (preset.id === "organ" ? 2 : isPercussion ? 1.65 : 2), now);
     oscillators[1].detune.value = preset.id === "pad" || preset.id === "strings" ? 9 : 2;
     const overtoneGain = context.createGain();
     overtoneGain.gain.value = preset.id === "organ" ? .42 : preset.id === "marimba" ? .34 : .17;
@@ -406,7 +539,7 @@ export default function Home() {
     oscillators[1].connect(overtoneGain).connect(filter);
     filter.connect(gain).connect(panner).connect(master);
     oscillators.forEach((oscillator) => oscillator.start(now));
-    voicesRef.current.set(key, { oscillators, gain, release: preset.release });
+    voicesRef.current.set(key, { sources: oscillators, gain, release: preset.release });
     setVoiceCount(voicesRef.current.size);
     if (source === "live") {
       liveVoiceKeysRef.current.set(note, key);
@@ -419,7 +552,7 @@ export default function Home() {
       window.setTimeout(() => stopVoice(key), durationSeconds * 1000);
     }
     return key;
-  }, [ensureAudio, selectedTrackId, stopVoice]);
+  }, [ensureAudio, loadSampleInstrument, sampleStatus, selectedTrackId, stopVoice]);
 
   const releaseLiveNote = useCallback((note: number) => {
     heldNotesRef.current.delete(note);
@@ -554,8 +687,23 @@ export default function Home() {
     setSelectedTrackId(track.id);
     setSelectedNoteId(null);
     setModal(null);
+    if (instrument.sample) void loadSampleInstrument(instrument);
     notify(`${instrument.name} 音轨已创建`);
-  }, [commitTracks, notify]);
+  }, [commitTracks, loadSampleInstrument, notify]);
+
+  const addChineseSuite = useCallback(() => {
+    const suite = CHINESE_INSTRUMENTS.map((instrument, index): Track => ({
+      id: uid("track"), name: instrument.name.toUpperCase(), instrument: instrument.id, color: instrument.color,
+      volume: instrument.id === "suona" ? 62 : 76, pan: index % 2 === 0 ? -12 : 12, reverb: instrument.id === "erhu" || instrument.id === "dizi" ? 34 : 20,
+      mute: false, solo: false, arm: index === 0, notes: [],
+    }));
+    commitTracks((current) => [...current.map((track) => ({ ...track, arm: false })), ...suite]);
+    setSelectedTrackId(suite[0].id);
+    setSelectedNoteId(null);
+    setModal(null);
+    void loadSampleInstrument(CHINESE_INSTRUMENTS[0]);
+    notify("国风采样套组已加入 · 8 条音轨");
+  }, [commitTracks, loadSampleInstrument, notify]);
 
   const updateTrack = useCallback((trackId: string, patch: Partial<Track>, withHistory = false) => {
     const update = (current: Track[]) => current.map((track) => track.id === trackId ? { ...track, ...patch } : track);
@@ -565,7 +713,9 @@ export default function Home() {
   const setArmedTrack = useCallback((trackId: string) => {
     setTracks((current) => current.map((track) => ({ ...track, arm: track.id === trackId ? !track.arm : false })));
     setSelectedTrackId(trackId);
-  }, []);
+    const preset = instrumentById(tracksRef.current.find((track) => track.id === trackId)?.instrument ?? "grand");
+    if (preset.sample) void loadSampleInstrument(preset);
+  }, [loadSampleInstrument]);
 
   const deleteSelectedTrack = useCallback(() => {
     if (tracks.length <= 1 || !selectedTrack) return;
@@ -580,7 +730,15 @@ export default function Home() {
   const changeInstrument = useCallback((instrumentId: InstrumentId) => {
     const instrument = instrumentById(instrumentId);
     updateTrack(selectedTrackId, { instrument: instrumentId, color: instrument.color, name: instrument.name.toUpperCase() }, true);
-  }, [selectedTrackId, updateTrack]);
+    if (instrument.sample) void loadSampleInstrument(instrument);
+  }, [loadSampleInstrument, selectedTrackId, updateTrack]);
+
+  const selectTrack = useCallback((track: Track) => {
+    setSelectedTrackId(track.id);
+    setSelectedNoteId(null);
+    const preset = instrumentById(track.instrument);
+    if (preset.sample) void loadSampleInstrument(preset);
+  }, [loadSampleInstrument]);
 
   const addEditorNote = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest(".roll-note")) return;
@@ -828,16 +986,23 @@ export default function Home() {
           <div className="panel-heading"><div><span>BROWSER</span><strong>音色与音轨</strong></div><button className="panel-close" onClick={() => setMobilePanel(null)}>×</button></div>
           <div className="library-tabs"><button className="selected">音色</button><button onClick={() => notify("采样库可在工程包中管理")}>采样</button><button onClick={() => notify("效果器位于右侧通道条")}>效果</button></div>
           <div className="instrument-library">
-            {INSTRUMENTS.map((instrument) => (
+            <div className="library-group"><span>STUDIO · {CORE_INSTRUMENTS.length}</span></div>
+            {CORE_INSTRUMENTS.map((instrument) => (
               <button key={instrument.id} className={selectedTrack?.instrument === instrument.id ? "selected" : ""} onClick={() => changeInstrument(instrument.id)}>
                 <i style={{ background: instrument.color }}>{instrument.icon}</i><span><strong>{instrument.name}</strong><small>{instrument.family}</small></span><b>›</b>
+              </button>
+            ))}
+            <div className="library-group chinese"><span>国风采样 · {CHINESE_INSTRUMENTS.length}</span><div><button onClick={() => setModal("samples")}>来源</button><button onClick={addChineseSuite}>＋ 整套</button></div></div>
+            {CHINESE_INSTRUMENTS.map((instrument) => (
+              <button key={instrument.id} className={`${selectedTrack?.instrument === instrument.id ? "selected" : ""} sample-instrument`} onClick={() => changeInstrument(instrument.id)}>
+                <i style={{ background: instrument.color }}>{instrument.icon}</i><span><strong>{instrument.name}</strong><small>{instrument.family} · {sampleStatus[instrument.id] === "ready" ? "已就绪" : sampleStatus[instrument.id] === "loading" ? "加载中" : sampleStatus[instrument.id] === "error" ? "合成回退" : "按需加载"}</small></span><b className={sampleStatus[instrument.id] ?? "idle"}>{sampleStatus[instrument.id] === "loading" ? "◌" : sampleStatus[instrument.id] === "ready" ? "●" : "↓"}</b>
               </button>
             ))}
           </div>
           <div className="track-list-heading"><span>TRACKS · {tracks.length}</span><button onClick={() => setModal("new-track")}>＋</button></div>
           <div className="compact-track-list">
             {tracks.map((track, index) => (
-              <button key={track.id} className={track.id === selectedTrackId ? "selected" : ""} onClick={() => { setSelectedTrackId(track.id); setSelectedNoteId(null); setMobilePanel(null); }}>
+              <button key={track.id} className={track.id === selectedTrackId ? "selected" : ""} onClick={() => { selectTrack(track); setMobilePanel(null); }}>
                 <span className="track-number">{String(index + 1).padStart(2, "0")}</span><i style={{ background: track.color }} /><span>{track.name}</span>
               </button>
             ))}
@@ -867,7 +1032,7 @@ export default function Home() {
                 <div className="playhead" style={{ left: `calc(228px + (100% - 228px) * ${currentStep / LOOP_STEPS})` }}><i /><span /></div>
                 {tracks.map((track, index) => (
                   <div className={`track-lane ${track.id === selectedTrackId ? "selected" : ""}`} key={track.id}>
-                    <div className="track-label" role="button" tabIndex={0} onClick={() => { setSelectedTrackId(track.id); setSelectedNoteId(null); }} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedTrackId(track.id); setSelectedNoteId(null); } }}>
+                    <div className="track-label" role="button" tabIndex={0} onClick={() => selectTrack(track)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectTrack(track); } }}>
                       <span className="track-index" style={{ color: track.color }}>{String(index + 1).padStart(2, "0")}</span>
                       <i className="track-color" style={{ background: track.color }} />
                       <div><strong>{track.name}</strong><small>{instrumentById(track.instrument).family} · CH {index + 1}</small></div>
@@ -918,7 +1083,7 @@ export default function Home() {
 
           <div className="performance-panel">
             <div className="performance-strip">
-              <div><span>LIVE INPUT</span><strong>{selectedInstrument.name}</strong><small>{connection === "connected" ? deviceName : "COMPUTER KEYS A–K"}</small></div>
+              <div><span>LIVE INPUT</span><strong>{selectedInstrument.name}</strong><small>{selectedInstrument.sample ? `${selectedInstrument.sample.source} · ${sampleStatus[selectedInstrument.id] === "ready" ? "SAMPLE READY" : sampleStatus[selectedInstrument.id] === "loading" ? "LOADING" : "PLAY TO LOAD"}` : connection === "connected" ? deviceName : "COMPUTER KEYS A–K"}</small></div>
               <div className="note-monitor"><b>{lastNote === null ? "—" : noteName(lastNote)}</b><span>NOTE</span></div>
               <div className="velocity-monitor"><span>VELOCITY <b>{String(lastVelocity).padStart(3, "0")}</b></span><i><b style={{ width: `${lastVelocity / 127 * 100}%` }} /></i></div>
               <div className="octave-switch"><span>OCTAVE</span><button onClick={() => setOctave((value) => Math.max(2, value - 1))}>−</button><b>{octave}</b><button onClick={() => setOctave((value) => Math.min(6, value + 1))}>＋</button></div>
@@ -974,10 +1139,11 @@ export default function Home() {
       {modal && <div className="modal-backdrop" role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) setModal(null); }}>
         <section className={`modal-card modal-${modal}`} role="dialog" aria-modal="true" aria-label={modal}>
           <button className="modal-close" onClick={() => setModal(null)}>×</button>
-          {modal === "new-track" && <><div className="modal-title"><span>ADD TRACK</span><h2>选择你的下一件乐器</h2><p>所有音轨共享下方键盘，选中哪条就演奏哪种声音。</p></div><div className="instrument-grid">{INSTRUMENTS.map((instrument) => <button key={instrument.id} onClick={() => addTrack(instrument.id)}><i style={{ background: instrument.color }}>{instrument.icon}</i><span><strong>{instrument.name}</strong><small>{instrument.family}</small></span><b>＋</b></button>)}</div></>}
+          {modal === "new-track" && <><div className="modal-title"><span>ADD TRACK</span><h2>选择你的下一件乐器</h2><p>所有音轨共享下方键盘，国风乐器会在首次选择时加载公开采样。</p></div><button className="suite-action" onClick={addChineseSuite}><span><b>国风采样套组</b><small>古筝 · 二胡 · 琵琶 · 竹笛 · 扬琴 · 唢呐 · 笙 · 锣鼓</small></span><strong>＋ 加入 8 条音轨</strong></button><div className="instrument-grid">{INSTRUMENTS.map((instrument) => <button key={instrument.id} onClick={() => addTrack(instrument.id)}><i style={{ background: instrument.color }}>{instrument.icon}</i><span><strong>{instrument.name}</strong><small>{instrument.family}{instrument.sample ? " · SAMPLE" : ""}</small></span><b>＋</b></button>)}</div></>}
           {modal === "audio" && <><div className="modal-title"><span>SETTINGS</span><h2>音频与录音设置</h2><p>为浏览器内的低延迟演奏优化。</p></div><div className="settings-list"><div><span><strong>音频缓冲</strong><small>延迟越低，CPU 占用越高</small></span><select aria-label="音频缓冲"><option>128 samples · 2.7 ms</option><option>256 samples · 5.3 ms</option><option>512 samples · 10.7 ms</option></select></div><div><span><strong>采样率</strong><small>当前音频上下文</small></span><select aria-label="采样率"><option>48 kHz</option><option>44.1 kHz</option></select></div><div><span><strong>录音预备拍</strong><small>录音前播放一小节节拍</small></span><input aria-label="录音预备拍" type="checkbox" checked={countIn} onChange={(event) => setCountIn(event.target.checked)} /></div><div><span><strong>循环录音</strong><small>持续覆盖 2 小节循环区域</small></span><input aria-label="循环录音" type="checkbox" checked={looping} onChange={(event) => setLooping(event.target.checked)} /></div></div><button className="primary-action" onClick={() => setModal(null)}>完成</button></>}
           {modal === "shortcuts" && <><div className="modal-title"><span>KEY COMMANDS</span><h2>把双手留给音乐</h2><p>电脑键盘与 MIDI 键盘可同时使用。</p></div><div className="shortcut-grid"><div><kbd>Space</kbd><span>播放 / 暂停</span></div><div><kbd>R</kbd><span>开始 / 停止录音</span></div><div><kbd>M</kbd><span>节拍器</span></div><div><kbd>Shift</kbd><span>延音踏板</span></div><div><kbd>A – K</kbd><span>演奏当前音色</span></div><div><kbd>⌘ Z</kbd><span>撤销编辑</span></div><div><kbd>Delete</kbd><span>删除选中音符</span></div><div><kbd>⌘ S</kbd><span>保存到本机</span></div></div></>}
           {modal === "export" && <><div className="modal-title"><span>BOUNCE & SHARE</span><h2>带走你的作品</h2><p>{tracks.length} 条音轨 · {tracks.reduce((count, track) => count + track.notes.length, 0)} 个音符 · {bpm} BPM</p></div><div className="export-options"><button onClick={() => exportProject("midi")}><i>.MID</i><span><strong>标准 MIDI 文件</strong><small>兼容 Logic、Ableton、Cubase 与大多数硬件</small></span><b>下载 ↗</b></button><button onClick={() => exportProject("json")}><i>.JSON</i><span><strong>TupTup 工程包</strong><small>保留音色、混音、速度和所有音轨数据</small></span><b>下载 ↗</b></button></div><p className="privacy-note">所有演奏与导出均在此设备完成，不会上传音乐数据。</p></>}
+          {modal === "samples" && <><div className="modal-title"><span>SAMPLE CREDITS</span><h2>国风采样套组</h2><p>按需从公开音源加载；下载后缓存在当前浏览器会话。无法联网时自动使用内置合成音色。</p></div><div className="sample-credit-list"><div><i style={{ background: "#dd7f6f" }}>胡</i><span><strong>烟雨二胡</strong><small>真实二胡 Regular Vibrato A4 · 演奏 Yu Chun Chan</small></span><b>Berklee BISA<br />CC BY 4.0</b></div><div><i style={{ background: "#e7bd62" }}>采</i><span><strong>其余七件乐器</strong><small>FluidR3 GM 多采样映射 · Koto / Shamisen / Flute / Dulcimer / Shanai / Reed Organ / Taiko</small></span><b>FluidR3 GM<br />CC BY 3.0</b></div></div><div className="sample-links"><a href="https://remix.berklee.edu/bisa-chinese-erhu/" target="_blank" rel="noreferrer">Berklee 二胡采样来源 ↗</a><a href="https://github.com/gleitz/midi-js-soundfonts" target="_blank" rel="noreferrer">FluidR3 SoundFont 来源 ↗</a></div><button className="primary-action" onClick={() => setModal(null)}>完成</button></>}
         </section>
       </div>}
 

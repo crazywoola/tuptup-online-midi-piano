@@ -13,7 +13,8 @@ for the **TupTup TS01-MIDI** and its **SAM5704** sound-module input.
 - Stable single-page DAW layout with arrangement, piano roll, mixer, and shared keyboard
 - Web MIDI input with automatic discovery of every available input port
 - Explicit support for the TS01's split `TupTup TS01-MIDI` and `SAM5704` ports
-- Nine velocity-sensitive Web Audio instruments across multitrack sessions
+- Nine synthesized instruments plus an eight-instrument Chinese sample suite
+- On-demand openly licensed samples for guzheng, erhu, pipa, dizi, yangqin, suona, sheng, and Chinese percussion
 - Tempo, metronome, loop transport, recording, playback, mute, solo, and arm
 - Piano-roll note drawing, selection, duplication, quantize, humanize, and deletion
 - MIDI file import/export plus local project save and JSON project export
@@ -71,11 +72,16 @@ on the tested TS01 hardware, the physical piano keys send notes from
 - React 19 and TypeScript for the workstation interface and sequencer state
 - Web MIDI API for hardware input
 - Web Audio API for low-latency multitimbral synthesis and metronome playback
+- Session-cached sample playback with offline synthesis fallback
 - vinext and Cloudflare Workers for the application runtime
 - CSS for the responsive piano and performance feedback
 
 MIDI events and audio stay in the browser. The app does not upload performance
 data or require an account.
+
+The Chinese suite uses CC BY audio from Berklee BISA and FluidR3 GM. See
+[THIRD_PARTY_SAMPLES.md](THIRD_PARTY_SAMPLES.md) for source links, attribution,
+licenses, adaptations, and instrument mappings.
 
 ## Contributing
 
