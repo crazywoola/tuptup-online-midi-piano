@@ -26,6 +26,32 @@ test("migrates v2 step notes to a v3 two-bar clip without changing musical posit
   assert.deepEqual(migrated.tracks[0].clips[0].notes[0], { id: "n1", pitch: 64, tick: 600, durationTicks: 360, velocity: 87 });
 });
 
+test("generates bounded random ideas and only randomizes targeted notes", () => {
+  let nextId = 0;
+  const generated = projectLib.generateRandomNotes({
+    lengthTicks: 480,
+    stepTicks: 120,
+    pitches: [60, 64],
+    density: .5,
+    random: () => .1,
+    idFactory: () => `random-${++nextId}`,
+  });
+  assert.deepEqual(generated.map(({ id, pitch, tick, durationTicks, velocity }) => [id, pitch, tick, durationTicks, velocity]), [
+    ["random-1", 60, 0, 120, 76],
+    ["random-2", 60, 120, 120, 76],
+    ["random-3", 60, 240, 120, 76],
+    ["random-4", 60, 360, 120, 76],
+  ]);
+
+  const original = [
+    { id: "a", pitch: 50, tick: 0, durationTicks: 120, velocity: 40 },
+    { id: "b", pitch: 51, tick: 120, durationTicks: 240, velocity: 50 },
+  ];
+  const randomized = projectLib.randomizeNoteValues(original, new Set(["a"]), [60, 64], () => .99);
+  assert.deepEqual(randomized[0], { id: "a", pitch: 64, tick: 0, durationTicks: 120, velocity: 118 });
+  assert.equal(randomized[1], original[1]);
+});
+
 test("snaps every straight and triplet grid and extends songs in four-bar blocks", () => {
   assert.equal(projectLib.snapTick(239, "1/8"), 240);
   assert.equal(projectLib.snapTick(151, "1/8T"), 160);

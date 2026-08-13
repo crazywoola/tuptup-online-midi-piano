@@ -126,6 +126,56 @@ export function createClip(startTick: number, lengthTicks: number, name = "MIDI 
   };
 }
 
+export type RandomNoteOptions = {
+  lengthTicks: number;
+  stepTicks?: number;
+  pitches?: readonly number[];
+  density?: number;
+  random?: () => number;
+  idFactory?: () => string;
+};
+
+const DEFAULT_RANDOM_PITCHES = [60, 62, 64, 67, 69, 72] as const;
+
+export function generateRandomNotes({
+  lengthTicks,
+  stepTicks = STEP_TICKS,
+  pitches = DEFAULT_RANDOM_PITCHES,
+  density = .64,
+  random = Math.random,
+  idFactory = () => projectUid("random"),
+}: RandomNoteOptions): MidiNoteV3[] {
+  const safeLength = Math.max(STEP_TICKS, Math.round(lengthTicks));
+  const safeStep = Math.max(1, Math.round(stepTicks));
+  const playablePitches = pitches.length ? pitches.map(clampMidi) : [...DEFAULT_RANDOM_PITCHES];
+  const chance = Math.max(.1, Math.min(1, density));
+  const notes: MidiNoteV3[] = [];
+
+  for (let tick = 0; tick < safeLength; tick += safeStep) {
+    if (random() > chance) continue;
+    const pitch = playablePitches[Math.min(playablePitches.length - 1, Math.floor(random() * playablePitches.length))];
+    const durationTicks = Math.min(safeLength - tick, random() > .82 ? safeStep * 2 : safeStep);
+    notes.push({ id: idFactory(), pitch, tick, durationTicks, velocity: 72 + Math.floor(random() * 47) });
+  }
+
+  if (!notes.length) notes.push({ id: idFactory(), pitch: playablePitches[0], tick: 0, durationTicks: Math.min(safeStep, safeLength), velocity: 96 });
+  return notes;
+}
+
+export function randomizeNoteValues(
+  notes: readonly MidiNoteV3[],
+  targetIds: ReadonlySet<string>,
+  pitches: readonly number[] = DEFAULT_RANDOM_PITCHES,
+  random: () => number = Math.random,
+) {
+  const playablePitches = pitches.length ? pitches.map(clampMidi) : [...DEFAULT_RANDOM_PITCHES];
+  return notes.map((note) => {
+    if (!targetIds.has(note.id)) return note;
+    const pitch = playablePitches[Math.min(playablePitches.length - 1, Math.floor(random() * playablePitches.length))];
+    return { ...note, pitch, velocity: 72 + Math.floor(random() * 47) };
+  });
+}
+
 export function createEmptyProject(tracks: MidiTrackV3[], name = "UNTITLED SESSION"): ProjectDocumentV3 {
   const signature: TimeSignature = { numerator: 4, denominator: 4 };
   const perBar = barTicks(signature);

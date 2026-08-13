@@ -131,3 +131,20 @@ test("provides stable roll input from the shared 61-key keyboard", async () => {
   assert.doesNotMatch(styles, /\.piano-key\.white\.active\s*\{[^}]*transform/s);
   assert.doesNotMatch(styles, /\.piano-key\.black\.active\s*\{[^}]*transform/s);
 });
+
+test("ships an undoable random-idea action with readable control targets", async () => {
+  const [page, project, styles, guide] = await Promise.all([
+    readFile(new URL("../components/StudioWorkbench.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/project.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/guide/page.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(page, /randomizeClip/);
+  assert.match(page, /randomize-button/);
+  assert.match(page, /随机灵感/);
+  assert.match(project, /generateRandomNotes/);
+  assert.match(project, /randomizeNoteValues/);
+  assert.match(styles, /min-height:\s*34px/);
+  assert.match(styles, /musical surfaces retain their fixed geometry/i);
+  assert.match(guide, /Random Idea/);
+});

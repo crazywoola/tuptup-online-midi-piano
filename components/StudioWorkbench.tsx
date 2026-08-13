@@ -21,10 +21,12 @@ import {
   cloneProject,
   createClip,
   createEmptyProject,
+  generateRandomNotes,
   migrateProjectV2,
   normalizeProjectV3,
   projectContentEnd,
   projectUid,
+  randomizeNoteValues,
   requiredSongBars,
   snapTick,
   songEndTick,
@@ -92,7 +94,7 @@ const UI_TEXT = {
     language: "语言", switchLanguage: "切换到 English", guide: "说明书", openGuide: "打开功能说明书", transport: "传输控制", openLibrary: "打开音色库", undo: "撤销", redo: "重做", metronome: "节拍器", tempo: "速度", countIn: "预备拍", returnStart: "回到开头", pause: "暂停", play: "播放", stopRecording: "停止录音", record: "录音", loop: "循环", master: "主音量", audioSettings: "音频设置", openMixer: "打开混音器",
     browser: "浏览器", libraryTitle: "音色库", tones: "音色", samples: "采样", effects: "效果", sampleLibraryManaged: "采样库可在工程包中管理", effectsInChannel: "效果器位于右侧通道条", studioCollection: "录音室", chineseCollection: "国风采样", credits: "来源", fullSuite: "整套", tracks: "音轨", ready: "采样就绪", loading: "采样加载中", synthFallback: "合成回退", loadOnDemand: "云端高清", soundCheck: "音色检查", openSoundCheck: "打开全部乐器音色检查", previewSound: "试听", retrySample: "重试", checkAll: "检查全部 17 件乐器", checkingAll: "正在逐件检查…", soundCheckTitle: "让每件乐器都发出正确的声音", soundCheckHelp: "逐件下载并解码代表音符。完整检查约需 30–45 MB；未加载或网络失败时仍会立即使用合成音色。", sampleCheckComplete: (ready: number) => `音色检查完成 · ${ready}/17 采样就绪`, cachedSample: "已缓存", fallbackActive: "回退可用", sampleError: "需要重试",
     arrangement: "编曲", arrangementTitle: "编曲时间线", selectTool: "选择工具", pencilTool: "铅笔工具", splitTool: "切割工具", grid: "网格", gridAccuracy: "网格精度", add: "添加", addInstrumentTrack: "添加乐器音轨", notes: "音符",
-    pianoRoll: "钢琴卷帘", quantize: "量化 1/16", humanize: "人性化", duplicate: "重复", delete: "删除", rollHelp: "钢琴卷帘，点击空白处添加音符", stepLabel: (step: number) => `第 ${step} 格`, stepInput: "步进输入", stepInputHint: "开启后，按下方键盘、电脑 A–K 或 MIDI 键盘，音符会写入播放头并自动前进", liveRecordHint: "实时演奏请先待录音轨，再按 R 或录音键", learnMore: "查看完整说明",
+    pianoRoll: "钢琴卷帘", quantize: "量化 1/16", humanize: "人性化", randomize: "随机灵感", randomizeHint: "为当前选择生成新的音高和力度；空片段会自动生成旋律", randomClipName: "随机灵感", randomIdeaCreated: "随机灵感已生成 · 可撤销", duplicate: "重复", delete: "删除", rollHelp: "钢琴卷帘，点击空白处添加音符", stepLabel: (step: number) => `第 ${step} 格`, stepInput: "步进输入", stepInputHint: "开启后，按下方键盘、电脑 A–K 或 MIDI 键盘，音符会写入播放头并自动前进", liveRecordHint: "实时演奏请先待录音轨，再按 R 或录音键", learnMore: "查看完整说明",
     liveInput: "实时输入", note: "音符", velocity: "力度", octave: "八度", sustain: "延音", sampleReady: "采样就绪", playToLoad: "演奏以加载", computerKeys: "电脑键 A–K", keyboardLabel: "共享 61 键演奏键盘",
     channelStrip: "通道条", trackMixer: "音轨混音", selectedTrack: "已选音轨", trackName: "音轨名称", instrument: "乐器", inserts: "插入效果", compressor: "压缩器", eq: "三段均衡", on: "开", emptySlot: "空插槽", emptySlotReady: "空插槽已就绪", sends: "发送", reverb: "混响", delay: "延迟", pan: "声像", mute: "静音", solo: "独奏", arm: "待录", deleteTrack: "删除当前音轨",
     audioEngine: "音频引擎", polyphony: "复音数", autosave: "自动保存 · 本机", hardware: "硬件", midiDevice: "MIDI 设备", connected: "已连接", readyToConnect: "等待连接", searchingDevices: "正在搜索设备…", rescanMidi: "重新扫描 MIDI 输入", connectMidiKeyboard: "连接 MIDI 键盘", inputMode: "输入模式", allChannels: "全通道", latency: "延迟", interactive: "交互级", dataPrivacy: "数据隐私", localOnly: "仅限本机",
@@ -111,7 +113,7 @@ const UI_TEXT = {
     language: "Language", switchLanguage: "切换到中文", guide: "Guide", openGuide: "Open the feature guide", transport: "Transport controls", openLibrary: "Open sound library", undo: "Undo", redo: "Redo", metronome: "Metronome", tempo: "Tempo", countIn: "Count-in", returnStart: "Return to start", pause: "Pause", play: "Play", stopRecording: "Stop recording", record: "Record", loop: "Loop", master: "Master", audioSettings: "Audio settings", openMixer: "Open mixer",
     browser: "Browser", libraryTitle: "Sound Library", tones: "Sounds", samples: "Samples", effects: "Effects", sampleLibraryManaged: "Manage the sample library in the project bundle", effectsInChannel: "Effects are available in the channel strip", studioCollection: "Studio", chineseCollection: "Chinese Samples", credits: "Credits", fullSuite: "Full Suite", tracks: "Tracks", ready: "Sample Ready", loading: "Loading Sample", synthFallback: "Synth Fallback", loadOnDemand: "Cloud HD", soundCheck: "Sound Check", openSoundCheck: "Open the all-instrument sound check", previewSound: "Preview", retrySample: "Retry", checkAll: "Check All 17 Instruments", checkingAll: "Checking every instrument…", soundCheckTitle: "Make sure every instrument sounds right", soundCheckHelp: "Downloads and decodes a representative note for every instrument. A full check uses about 30–45 MB; synthesis still responds instantly before samples load or when offline.", sampleCheckComplete: (ready: number) => `Sound check complete · ${ready}/17 samples ready`, cachedSample: "Cached", fallbackActive: "Fallback Ready", sampleError: "Retry Needed",
     arrangement: "Arrangement", arrangementTitle: "Arrangement Timeline", selectTool: "Select tool", pencilTool: "Pencil tool", splitTool: "Split tool", grid: "Grid", gridAccuracy: "Grid resolution", add: "Add", addInstrumentTrack: "Add Instrument Track", notes: "Notes",
-    pianoRoll: "Piano Roll", quantize: "Quantize 1/16", humanize: "Humanize", duplicate: "Duplicate", delete: "Delete", rollHelp: "Piano roll; click empty space to add a note", stepLabel: (step: number) => `step ${step}`, stepInput: "Step Input", stepInputHint: "Turn it on, then play the keyboard below, A–K, or a MIDI keyboard. Notes land at the playhead and advance automatically.", liveRecordHint: "For live performance, arm a track and press R or Record", learnMore: "View Full Guide",
+    pianoRoll: "Piano Roll", quantize: "Quantize 1/16", humanize: "Humanize", randomize: "Random Idea", randomizeHint: "Generate new pitches and velocities for the selection; empty clips receive a melody", randomClipName: "RANDOM IDEA", randomIdeaCreated: "Random idea generated · undo available", duplicate: "Duplicate", delete: "Delete", rollHelp: "Piano roll; click empty space to add a note", stepLabel: (step: number) => `step ${step}`, stepInput: "Step Input", stepInputHint: "Turn it on, then play the keyboard below, A–K, or a MIDI keyboard. Notes land at the playhead and advance automatically.", liveRecordHint: "For live performance, arm a track and press R or Record", learnMore: "View Full Guide",
     liveInput: "Live Input", note: "Note", velocity: "Velocity", octave: "Octave", sustain: "Sustain", sampleReady: "Sample Ready", playToLoad: "Play to Load", computerKeys: "Computer Keys A–K", keyboardLabel: "Shared 61-key performance keyboard",
     channelStrip: "Channel Strip", trackMixer: "Track Mixer", selectedTrack: "Selected Track", trackName: "Track name", instrument: "Instrument", inserts: "Inserts", compressor: "Compressor", eq: "3-Band EQ", on: "On", emptySlot: "Empty Slot", emptySlotReady: "Empty slot is ready", sends: "Sends", reverb: "Reverb", delay: "Delay", pan: "Pan", mute: "Mute", solo: "Solo", arm: "Arm", deleteTrack: "Delete Current Track",
     audioEngine: "Audio Engine", polyphony: "Polyphony", autosave: "Autosave · Local", hardware: "Hardware", midiDevice: "MIDI Device", connected: "Connected", readyToConnect: "Ready to Connect", searchingDevices: "Searching for devices…", rescanMidi: "Rescan MIDI Inputs", connectMidiKeyboard: "Connect MIDI Keyboard", inputMode: "Input Mode", allChannels: "Omni · All Channels", latency: "Latency", interactive: "Interactive", dataPrivacy: "Data Privacy", localOnly: "Local Only",
@@ -1112,6 +1114,52 @@ export default function StudioWorkbench() {
     if (newSelection) { setSelectedNoteId(newSelection); setSelectedNoteIds(new Set([newSelection])); }
   }, [commitTracks, grid, quantizeStrength, selectedClip, selectedNoteId, selectedNoteIds, selectedTrack]);
 
+  const randomizeClip = useCallback(() => {
+    if (!selectedTrack) return;
+    const percussion = selectedTrack.instrument === "drums" || selectedTrack.instrument === "chinesePercussion";
+    const pitches = percussion
+      ? [36, 42, 38, 42, 36, 46]
+      : selectedTrack.instrument === "bass"
+        ? [36, 39, 41, 43, 46, 48]
+        : [60, 62, 64, 67, 69, 72];
+
+    if (selectedClip) {
+      const requestedIds = selectedNoteIds.size
+        ? selectedNoteIds
+        : selectedNoteId
+          ? new Set([selectedNoteId])
+          : new Set<string>();
+      const availableIds = new Set(selectedClip.notes.map((note) => note.id));
+      const requestedTargets = new Set([...requestedIds].filter((id) => availableIds.has(id)));
+      const targetIds = requestedTargets.size ? requestedTargets : availableIds;
+      const nextNotes = selectedClip.notes.length
+        ? randomizeNoteValues(selectedClip.notes, targetIds, pitches)
+        : generateRandomNotes({ lengthTicks: selectedClip.contentLengthTicks, stepTicks: GRID_VALUES[stepLength], pitches, density: percussion ? .72 : .62 });
+      commitTracks((current) => current.map((track) => track.id !== selectedTrack.id ? track : {
+        ...track,
+        clips: track.clips.map((clip) => clip.id === selectedClip.id ? { ...clip, notes: nextNotes } : clip),
+      }));
+      const selectedIds = selectedClip.notes.length ? targetIds : new Set(nextNotes.map((note) => note.id));
+      setSelectedNoteIds(new Set(selectedIds));
+      setSelectedNoteId(selectedIds.values().next().value ?? null);
+    } else {
+      const lengthTicks = barTicks(project.timeSignature) * 2;
+      const startTick = snapTick(currentTickRef.current, grid);
+      const notes = generateRandomNotes({ lengthTicks, stepTicks: GRID_VALUES[stepLength], pitches, density: percussion ? .72 : .62 });
+      const clip = createClip(startTick, lengthTicks, t.randomClipName, notes);
+      commitProject((current) => ({
+        ...current,
+        lengthBars: requiredSongBars(current, startTick + lengthTicks),
+        tracks: current.tracks.map((track) => track.id === selectedTrack.id ? { ...track, clips: [...track.clips, clip] } : track),
+      }));
+      setSelectedClipId(clip.id);
+      setSelectedNoteIds(new Set(notes.map((note) => note.id)));
+      setSelectedNoteId(notes[0]?.id ?? null);
+    }
+    setMobileView("roll");
+    notify(t.randomIdeaCreated);
+  }, [commitProject, commitTracks, grid, notify, project.timeSignature, selectedClip, selectedNoteId, selectedNoteIds, selectedTrack, stepLength, t]);
+
   const newProject = useCallback(() => {
     stopTransport();
     const blankTracks = INITIAL_PROJECT.tracks.map((track) => ({ ...track, clips: [] }));
@@ -1695,6 +1743,7 @@ export default function StudioWorkbench() {
             <div className="editor-toolbar">
               <div><span>{t.pianoRoll.toUpperCase()}</span><strong>{selectedClip ? `${selectedTrack?.name} · ${selectedClip.name}` : (locale === "zh" ? "演奏第一颗音符以创建片段" : "Play a note to create a clip")}</strong></div>
               <div>
+                <button className="randomize-button" onClick={randomizeClip} title={t.randomizeHint}>✦ {t.randomize}</button>
                 <button onClick={() => editSelectedNotes("quantize")}>{t.quantize}</button>
                 <label className="quantize-strength"><span>{quantizeStrength}%</span><input type="range" min="0" max="100" value={quantizeStrength} onChange={(event) => setQuantizeStrength(Number(event.target.value))} /></label>
                 <button onClick={() => editSelectedNotes("humanize")}>{t.humanize}</button>
