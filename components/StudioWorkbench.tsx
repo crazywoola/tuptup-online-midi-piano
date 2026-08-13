@@ -40,6 +40,7 @@ import {
 } from "@/lib/project";
 import { loadLastProjectDocument, saveProjectDocument } from "@/lib/project-store";
 import { makeProjectMidi, parseMidiFile } from "@/lib/midi";
+import { MidiInputController } from "@/lib/midi-input";
 import { advanceTransportTick, collectPlaybackEvents, scheduleSegments, secondsToTicks, ticksToSeconds } from "@/lib/sequencer";
 import { AudioBufferLru } from "@/lib/audio-buffer-lru";
 
@@ -313,8 +314,7 @@ export default function StudioWorkbench() {
   const heldNotesRef = useRef(new Set<number>());
   const sustainedNotesRef = useRef(new Set<number>());
   const sustainRef = useRef(false);
-  const midiInputsRef = useRef<Map<string, MIDIInput>>(new Map());
-  const midiAccessRef = useRef<MIDIAccess | null>(null);
+  const midiControllerRef = useRef<MidiInputController | null>(null);
   const projectRef = useRef(project);
   const metroRef = useRef(metronome);
   const currentTickRef = useRef(currentTick);
@@ -334,6 +334,8 @@ export default function StudioWorkbench() {
   const rollGridRef = useRef<HTMLDivElement | null>(null);
   const rollBodyRef = useRef<HTMLDivElement | null>(null);
   const triggerNoteRef = useRef<(note: number, velocity?: number, trackId?: string, source?: "live" | "sequence" | "preview", durationSeconds?: number, presetOverride?: InstrumentId, scheduledWhen?: number) => string>(() => "");
+  const releaseLiveNoteRef = useRef<(note: number) => void>(() => {});
+  const setSustainRef = useRef<(enabled: boolean) => void>(() => {});
 
   const t = UI_TEXT[locale];
   const allKeyboardNotes = useMemo(() => Array.from({ length: KEYBOARD_HIGH - KEYBOARD_LOW + 1 }, (_, i) => KEYBOARD_LOW + i), []);
@@ -485,8 +487,54 @@ export default function StudioWorkbench() {
     });
   }, []);
 
+  const destroyAudioGraph = useCallback((updateUi = true) => {
+    const context = audioContextRef.current;
+    audioContextRef.current = null;
+
+    voicesRef.current.forEach((voice) => {
+      voice.sources.forEach((source) => {
+        source.onended = null;
+        try { source.stop(); } catch { /* already stopped */ }
+        source.disconnect();
+      });
+      voice.gain.disconnect();
+    });
+    voicesRef.current.clear();
+    liveVoiceKeysRef.current.clear();
+    heldNotesRef.current.clear();
+    sustainedNotesRef.current.clear();
+    sustainRef.current = false;
+
+    trackBusesRef.current.forEach((bus) => {
+      bus.input.disconnect();
+      bus.volume.disconnect();
+      bus.pan.disconnect();
+      bus.send.disconnect();
+    });
+    trackBusesRef.current.clear();
+    masterGainRef.current?.disconnect();
+    limiterRef.current?.disconnect();
+    reverbRef.current?.disconnect();
+    masterGainRef.current = null;
+    limiterRef.current = null;
+    reverbRef.current = null;
+
+    if (updateUi) {
+      setVoiceCount(0);
+      setActiveNotes(new Set());
+      setSustainState(false);
+      setAudioInfo(null);
+    }
+    if (context && context.state !== "closed") return context.close();
+    return Promise.resolve();
+  }, []);
+
   const ensureAudio = useCallback(() => {
     let context = audioContextRef.current;
+    if (context?.state === "closed") {
+      void destroyAudioGraph();
+      context = null;
+    }
     if (!context) {
       context = new AudioContext({ latencyHint: "interactive" });
       const master = context.createGain();
@@ -517,7 +565,7 @@ export default function StudioWorkbench() {
     }
     if (context.state === "suspended") void context.resume();
     return context;
-  }, [masterVolume]);
+  }, [destroyAudioGraph, masterVolume]);
 
   const getTrackBus = useCallback((track: Track) => {
     const context = ensureAudio();
@@ -823,6 +871,16 @@ export default function StudioWorkbench() {
     voicesRef.current.forEach((_, key) => { if (key.startsWith("sequence-")) stopVoice(key, true); });
   }, [insertNoteAtSongTick, stopVoice]);
 
+  const restartAudioEngine = useCallback(async () => {
+    stopTransport();
+    await destroyAudioGraph();
+    sampleLruRef.current.clear();
+    sampleAnchorsRef.current.clear();
+    exactSampleBuffersRef.current.clear();
+    setSampleStatus({});
+    notify(locale === "zh" ? "音频引擎已重启" : "Audio engine restarted");
+  }, [destroyAudioGraph, locale, notify, stopTransport]);
+
   const togglePlay = useCallback(() => {
     ensureAudio();
     setIsPlaying((playing) => !playing);
@@ -865,48 +923,44 @@ export default function StudioWorkbench() {
     setDeviceMessageKind("searching");
     try {
       const access = await navigator.requestMIDIAccess({ sysex: false });
-      midiAccessRef.current = access;
-      const attachInputs = async () => {
-        midiInputsRef.current.forEach((input) => { input.onmidimessage = null; });
-        const inputs = Array.from(access.inputs.values());
-        if (!inputs.length) {
-          midiInputsRef.current.clear();
-          setConnection("missing");
-          setDeviceMessageKind("missing");
-          return;
-        }
-        const opened = (await Promise.all(inputs.map(async (input) => {
-          try {
-            await input.open();
-            input.onmidimessage = (event) => {
-              const [status = 0, note = 0, value = 0] = Array.from(event.data ?? []);
-              const command = status & 0xf0;
-              setMidiEventCount((count) => count + 1);
-              if (command === 0x90 && value > 0) triggerNote(note, value);
-              if (command === 0x80 || (command === 0x90 && value === 0)) releaseLiveNote(note);
-              if (command === 0xb0 && note === 64) setSustain(value >= 64);
-            };
-            return input;
-          } catch { return null; }
-        }))).filter((input): input is MIDIInput => input !== null);
-        if (!opened.length) throw new Error("No MIDI input opened");
-        midiInputsRef.current = new Map(opened.map((input) => [input.id, input]));
-        const primary = opened.find((input) => input.name?.toLowerCase().includes("tuptup") || input.name?.toLowerCase().includes("sam5704")) ?? opened[0];
-        setDeviceName(primary.name || TARGET_DEVICE);
-        setConnection("connected");
-        setDevicePortCount(opened.length);
-        setDeviceMessageKind("connected");
-        ensureAudio();
-        notify(t.midiConnected);
-      };
-      await attachInputs();
-      access.onstatechange = () => { void attachInputs(); };
+      let controller = midiControllerRef.current;
+      if (!controller) {
+        controller = new MidiInputController({
+          onMessage: (message) => {
+            setMidiEventCount((count) => count + 1);
+            if (message.type === "note-on") triggerNoteRef.current(message.note, message.velocity);
+            if (message.type === "note-off") releaseLiveNoteRef.current(message.note);
+            if (message.type === "sustain") setSustainRef.current(message.enabled);
+          },
+          onInputsChanged: (inputs) => {
+            setDevicePortCount(inputs.length);
+            if (!inputs.length) {
+              setConnection("missing");
+              setDeviceMessageKind("missing");
+              return;
+            }
+            const primary = inputs.find((input) => input.name?.toLowerCase().includes("tuptup") || input.name?.toLowerCase().includes("sam5704")) ?? inputs[0];
+            setDeviceName(primary.name || TARGET_DEVICE);
+            setConnection("connected");
+            setDeviceMessageKind("connected");
+          },
+          onError: () => {
+            setConnection("error");
+            setDeviceMessageKind("failed");
+          },
+        });
+        midiControllerRef.current = controller;
+      }
+      const inputs = await controller.connect(access);
+      if (!inputs.length) return;
+      ensureAudio();
+      notify(t.midiConnected);
     } catch (error) {
       const errorName = error instanceof DOMException ? error.name : "";
       setConnection(errorName === "NotAllowedError" || errorName === "SecurityError" ? "blocked" : "error");
       setDeviceMessageKind("failed");
     }
-  }, [ensureAudio, notify, releaseLiveNote, setSustain, t, triggerNote]);
+  }, [ensureAudio, notify, t]);
 
   const addTrack = useCallback((instrumentId: InstrumentId) => {
     const instrument = instrumentById(instrumentId);
@@ -1112,6 +1166,8 @@ export default function StudioWorkbench() {
 
   useEffect(() => { projectRef.current = project; }, [project]);
   useEffect(() => { triggerNoteRef.current = triggerNote; }, [triggerNote]);
+  useEffect(() => { releaseLiveNoteRef.current = releaseLiveNote; }, [releaseLiveNote]);
+  useEffect(() => { setSustainRef.current = setSustain; }, [setSustain]);
   useEffect(() => { metroRef.current = metronome; }, [metronome]);
   useEffect(() => { currentTickRef.current = currentTick; }, [currentTick]);
   useEffect(() => { recordingRef.current = isRecording; }, [isRecording]);
@@ -1278,11 +1334,11 @@ export default function StudioWorkbench() {
   }, [editSelectedNotes, octave, redo, releaseLiveNote, saveProject, selectedNoteId, setSustain, togglePlay, toggleRecord, triggerNote, undo]);
 
   useEffect(() => () => {
-    midiInputsRef.current.forEach((input) => { input.onmidimessage = null; });
-    voicesRef.current.forEach((_, key) => stopVoice(key, true));
+    midiControllerRef.current?.dispose();
+    midiControllerRef.current = null;
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-    void audioContextRef.current?.close();
-  }, [stopVoice]);
+    void destroyAudioGraph(false);
+  }, [destroyAudioGraph]);
 
   const pointerDown = (note: number) => (event: React.PointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -1740,7 +1796,7 @@ export default function StudioWorkbench() {
             <div className="settings-list">
               <div><span><strong>{t.audioBuffer}</strong><small>{locale === "zh" ? "由浏览器和设备自动管理" : "Managed by the browser and device"}</small></span><b>{audioInfo ? `${audioInfo.latencyMs} ms` : "—"}</b></div>
               <div><span><strong>{t.sampleRate}</strong><small>{t.sampleRateHelp}</small></span><b>{audioInfo ? `${audioInfo.sampleRate / 1000} kHz` : "—"}</b></div>
-              <div><span><strong>{locale === "zh" ? "重启音频引擎" : "Restart audio engine"}</strong><small>{locale === "zh" ? "用于设备切换或异常恢复" : "Use after a device change or audio fault"}</small></span><button onClick={() => { stopTransport(); void audioContextRef.current?.close(); audioContextRef.current = null; masterGainRef.current = null; sampleLruRef.current.clear(); sampleAnchorsRef.current.clear(); exactSampleBuffersRef.current.clear(); setSampleStatus({}); setAudioInfo(null); notify(locale === "zh" ? "音频引擎已重启" : "Audio engine restarted"); }}>{locale === "zh" ? "重启" : "Restart"}</button></div>
+              <div><span><strong>{locale === "zh" ? "重启音频引擎" : "Restart audio engine"}</strong><small>{locale === "zh" ? "用于设备切换或异常恢复" : "Use after a device change or audio fault"}</small></span><button onClick={() => { void restartAudioEngine(); }}>{locale === "zh" ? "重启" : "Restart"}</button></div>
               <div><span><strong>{t.recordingCountIn}</strong><small>{t.recordingCountInHelp}</small></span><input aria-label={t.recordingCountIn} type="checkbox" checked={countIn} onChange={(event) => setCountIn(event.target.checked)} /></div>
               <div><span><strong>{t.loopRecording}</strong><small>{t.loopRecordingHelp}</small></span><input aria-label={t.loopRecording} type="checkbox" checked={looping} onChange={(event) => commitProject((current) => ({ ...current, loop: { ...current.loop, enabled: event.target.checked } }))} /></div>
             </div>
