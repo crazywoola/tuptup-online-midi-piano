@@ -11,6 +11,7 @@ for the **TupTup TS01-MIDI** and its **SAM5704** sound-module input.
 ## Features
 
 - Stable single-page DAW layout with arrangement, piano roll, mixer, and shared keyboard
+- Complete Chinese/English interface with browser-language detection and a persistent header switch
 - Web MIDI input with automatic discovery of every available input port
 - Explicit support for the TS01's split `TupTup TS01-MIDI` and `SAM5704` ports
 - Nine synthesized instruments plus an eight-instrument Chinese sample suite
@@ -43,6 +44,7 @@ npm run dev
 
 Open the local URL shown in the terminal, connect the controller over USB,
 choose **连接设备**, and approve the browser permission prompt.
+Use the **中 / EN** control in the header to switch the whole workstation language.
 
 ## How the TS01 connection works
 

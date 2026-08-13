@@ -18,8 +18,8 @@ export async function generateMetadata(): Promise<Metadata> {
   const host = headerList.get("x-forwarded-host") || headerList.get("host");
   const protocol = headerList.get("x-forwarded-proto") || (host?.includes("localhost") ? "http" : "https");
   const origin = host ? `${protocol}://${host}` : "https://tuptup-midi-studio.bananapink.chatgpt.site";
-  const title = "TupTup Studio — Browser MIDI Workstation";
-  const description = "专业级浏览器 MIDI 工作站：多音轨编曲、国风公开采样套组、钢琴卷帘、录音、混音与 MIDI 导入导出。";
+  const title = "TupTup Studio — 中英双语 Browser MIDI Workstation";
+  const description = "专业级中英双语浏览器 MIDI 工作站：多音轨编曲、国风公开采样、钢琴卷帘、录音、混音与 MIDI 导入导出。 A professional bilingual browser MIDI workstation.";
 
   return {
     title,

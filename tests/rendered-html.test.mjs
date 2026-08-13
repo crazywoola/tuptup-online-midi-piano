@@ -57,3 +57,29 @@ test("keeps the public metadata and MIDI privacy promise", async () => {
   assert.equal(erhuSample.subarray(0, 4).toString("ascii"), "RIFF");
   assert.match(license, /MIT License/);
 });
+
+test("ships a persistent Chinese and English interface for every instrument", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const instrumentIds = [
+    "grand", "electric", "pad", "bass", "lead", "organ", "marimba", "strings", "drums",
+    "guzheng", "erhu", "pipa", "dizi", "yangqin", "suona", "sheng", "chinesePercussion",
+  ];
+
+  assert.match(page, /const UI_TEXT = \{\s*zh:/s);
+  assert.match(page, /\n\s*en: \{/);
+  assert.match(page, /tuptup-studio-locale/);
+  assert.match(page, /navigator\.language/);
+  assert.match(page, /className="language-toggle"/);
+  assert.match(page, /document\.documentElement\.lang/);
+  assert.match(page, /Chinese Sample Suite/);
+  assert.match(page, /国风采样套组/);
+
+  for (const id of instrumentIds) {
+    const instrumentLine = page.split("\n").find((line) => line.includes(`id: "${id}"`));
+    assert.ok(instrumentLine, `missing instrument ${id}`);
+    assert.match(instrumentLine, /nameZh: ".+"/);
+    assert.match(instrumentLine, /nameEn: ".+"/);
+    assert.match(instrumentLine, /familyZh: ".+"/);
+    assert.match(instrumentLine, /familyEn: ".+"/);
+  }
+});
