@@ -50,7 +50,7 @@ test("server-renders the standalone bilingual feature guide", async () => {
 test("keeps the public metadata, licensed sources, and MIDI privacy promise", async () => {
   const [layout, page, soundfont, readme, license, sampleCredits, erhuSample] = await Promise.all([
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/StudioWorkbench.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/soundfont.ts", import.meta.url), "utf8"),
     readFile(new URL("../README.md", import.meta.url), "utf8"),
     readFile(new URL("../LICENSE", import.meta.url), "utf8"),
@@ -76,7 +76,7 @@ test("keeps the public metadata, licensed sources, and MIDI privacy promise", as
 
 test("ships a persistent Chinese and English interface for every instrument", async () => {
   const [page, soundfont] = await Promise.all([
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/StudioWorkbench.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/soundfont.ts", import.meta.url), "utf8"),
   ]);
   const instrumentIds = [
@@ -93,7 +93,7 @@ test("ships a persistent Chinese and English interface for every instrument", as
   assert.match(page, /Chinese Sample Suite/);
   assert.match(page, /国风采样套组/);
   assert.match(page, /Check All 17 Instruments/);
-  assert.match(page, /完成你的第一段 Loop/);
+  assert.match(page, /完成你的第一首歌/);
   assert.match(page, /data-sound-check-id/);
 
   for (const id of instrumentIds) {
@@ -109,7 +109,7 @@ test("ships a persistent Chinese and English interface for every instrument", as
 
 test("provides stable roll input from the shared 61-key keyboard", async () => {
   const [page, guide, styles] = await Promise.all([
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/StudioWorkbench.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/guide/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
@@ -117,7 +117,8 @@ test("provides stable roll input from the shared 61-key keyboard", async () => {
   assert.match(page, /const EDITOR_LOW = KEYBOARD_LOW/);
   assert.match(page, /const EDITOR_HIGH = KEYBOARD_HIGH/);
   assert.match(page, /stepInputRef\.current/);
-  assert.match(page, /id: uid\("step"\)/);
+  assert.match(page, /insertNoteAtSongTick\(trackId, selectedClipId/);
+  assert.match(page, /GRID_VALUES\[stepLength\]/);
   assert.match(page, /href="\/guide#roll-input"/);
   assert.doesNotMatch(page, /className="compact-track-list"/);
   assert.doesNotMatch(page, /className="library-tabs"/);

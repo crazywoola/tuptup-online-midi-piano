@@ -64,6 +64,8 @@ source and provide a synth fallback whenever the licensed sample is not ready.
 - The raw response is persisted in the versioned browser Cache Storage entry
   `tuptup-soundfonts-v2`; decoded buffers remain in memory only.
 - Eleven representative pitches are decoded first. Exact requested pitches are
-  decoded lazily, with the nearest anchor used in the meantime.
+  decoded lazily, with the nearest anchor used in the meantime. Decoded buffers
+  share a 96 MB least-recently-used memory budget; the active instrument and
+  sounds inside the immediate playback horizon are retained.
 - `npm run audit:samples` validates HTTP availability, all 88 encoded pitches,
   11 anchors, representative MP3 bytes, and the local erhu WAV header.

@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "name": "V2 MIGRATION CHECK",
+  "bpm": 101,
+  "masterVolume": 67,
+  "tracks": [
+    {
+      "id": "legacy-grand",
+      "name": "LEGACY GRAND",
+      "instrument": "grand",
+      "color": "#9df564",
+      "volume": 74,
+      "pan": -8,
+      "reverb": 22,
+      "mute": false,
+      "solo": false,
+      "arm": true,
+      "notes": [
+        { "id": "legacy-note", "note": 65, "start": 20, "duration": 6, "velocity": 93 }
+      ]
+    }
+  ]
+}
