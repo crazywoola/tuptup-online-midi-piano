@@ -21,14 +21,14 @@ async function render() {
   );
 }
 
-test("server-renders the TupTup Piano page", async () => {
+test("server-renders the TupTup Studio workstation", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /TupTup Piano/i);
-  assert.match(html, /Online MIDI Instrument/i);
+  assert.match(html, /TupTup Studio/i);
+  assert.match(html, /Browser MIDI Workstation/i);
   assert.match(html, /TupTup TS01-MIDI/i);
   assert.doesNotMatch(html, /codex-preview/i);
   assert.doesNotMatch(html, /Your site is taking shape/i);
@@ -42,7 +42,7 @@ test("keeps the public metadata and MIDI privacy promise", async () => {
     readFile(new URL("../LICENSE", import.meta.url), "utf8"),
   ]);
 
-  assert.match(layout, /og\.png/);
+  assert.match(layout, /og-studio\.png/);
   assert.match(page, /requestMIDIAccess/);
   assert.match(page, /inputs\.map/);
   assert.match(readme, /SAM5704/);

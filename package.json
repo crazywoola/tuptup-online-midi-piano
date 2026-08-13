@@ -1,7 +1,7 @@
 {
   "name": "tuptup-online-midi-piano",
   "version": "0.1.0",
-  "description": "A low-latency Web MIDI piano for TupTup TS01-MIDI controllers.",
+  "description": "A browser-based multitrack MIDI workstation for TupTup TS01-MIDI controllers.",
   "private": true,
   "license": "MIT",
   "repository": {

@@ -1,23 +1,26 @@
-# TupTup Online MIDI Piano
+# TupTup Studio — Online MIDI Workstation
 
 [![CI](https://github.com/crazywoola/tuptup-online-midi-piano/actions/workflows/ci.yml/badge.svg)](https://github.com/crazywoola/tuptup-online-midi-piano/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-d7ff3f.svg)](LICENSE)
 
-A low-latency browser piano for USB MIDI controllers, built for the
-**TupTup TS01-MIDI** and its **SAM5704** sound-module input.
+A browser-based multitrack MIDI workstation for USB MIDI controllers, built
+for the **TupTup TS01-MIDI** and its **SAM5704** sound-module input.
 
-![TupTup Piano preview](public/og.png)
+![TupTup Studio preview](public/og-studio.png)
 
 ## Features
 
+- Stable single-page DAW layout with arrangement, piano roll, mixer, and shared keyboard
 - Web MIDI input with automatic discovery of every available input port
 - Explicit support for the TS01's split `TupTup TS01-MIDI` and `SAM5704` ports
-- Live Note On/Off visualization across a 61-key piano
-- Velocity-sensitive Web Audio synthesis
+- Nine velocity-sensitive Web Audio instruments across multitrack sessions
+- Tempo, metronome, loop transport, recording, playback, mute, solo, and arm
+- Piano-roll note drawing, selection, duplication, quantize, humanize, and deletion
+- MIDI file import/export plus local project save and JSON project export
+- Live Note On/Off visualization across a stable 61-key shared piano
 - Sustain pedal support through MIDI CC 64
-- Raw MIDI receive monitor for connection troubleshooting
 - Mouse, touch, and computer-keyboard fallback controls
-- Responsive interface with reduced-motion support
+- Responsive drawers, dialogs, keyboard shortcuts, and reduced-motion support
 
 ## Requirements
 
@@ -38,7 +41,7 @@ npm run dev
 ```
 
 Open the local URL shown in the terminal, connect the controller over USB,
-choose **Connect MIDI keyboard**, and approve the browser permission prompt.
+choose **连接设备**, and approve the browser permission prompt.
 
 ## How the TS01 connection works
 
@@ -65,9 +68,9 @@ on the tested TS01 hardware, the physical piano keys send notes from
 
 ## Architecture
 
-- React 19 and TypeScript for the interface and MIDI state
+- React 19 and TypeScript for the workstation interface and sequencer state
 - Web MIDI API for hardware input
-- Web Audio API for low-latency synthesis
+- Web Audio API for low-latency multitimbral synthesis and metronome playback
 - vinext and Cloudflare Workers for the application runtime
 - CSS for the responsive piano and performance feedback
 
