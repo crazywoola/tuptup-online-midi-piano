@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 const TARGET_DEVICE = "TupTup TS01-MIDI";
-const PUBLIC_SITE_URL = "https://tuptup-midi-piano.bananapink.chatgpt.site";
+const PUBLIC_SITE_URL = "https://tuptup-midi-studio.bananapink.chatgpt.site";
 const LOOP_STEPS = 32;
 const KEYBOARD_LOW = 36;
 const KEYBOARD_HIGH = 96;

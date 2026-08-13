@@ -17,7 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const headerList = await headers();
   const host = headerList.get("x-forwarded-host") || headerList.get("host");
   const protocol = headerList.get("x-forwarded-proto") || (host?.includes("localhost") ? "http" : "https");
-  const origin = host ? `${protocol}://${host}` : "https://tuptup-midi-piano.bananapink.chatgpt.site";
+  const origin = host ? `${protocol}://${host}` : "https://tuptup-midi-studio.bananapink.chatgpt.site";
   const title = "TupTup Studio — Browser MIDI Workstation";
   const description = "专业级浏览器 MIDI 工作站：多音轨编曲、节拍器、乐器音色、钢琴卷帘、录音、混音与 MIDI 导入导出。";
 
