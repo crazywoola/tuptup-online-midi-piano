@@ -42,6 +42,21 @@ export type MidiTrackV3 = {
   clips: MidiClipV3[];
 };
 
+export const ARRANGEMENT_STYLE_IDS = ["synthwave", "lofi", "cinematic", "guofeng", "funk"] as const;
+export type ArrangementStyleId = typeof ARRANGEMENT_STYLE_IDS[number];
+export type ArrangementStyleMode = ArrangementStyleId | "mixed";
+export type SongSectionRole = "intro" | "verse" | "prechorus" | "chorus" | "bridge" | "finale";
+
+export type SongSectionV3 = {
+  id: string;
+  role: SongSectionRole;
+  style: ArrangementStyleId;
+  startTick: number;
+  lengthTicks: number;
+  color: string;
+  instruments: InstrumentId[];
+};
+
 export type ProjectDocumentV3 = {
   version: typeof PROJECT_VERSION;
   id: string;
@@ -52,6 +67,7 @@ export type ProjectDocumentV3 = {
   lengthBars: number;
   masterVolume: number;
   loop: { enabled: boolean; startTick: number; endTick: number };
+  sections: SongSectionV3[];
   tracks: MidiTrackV3[];
   updatedAt: number;
 };
@@ -106,6 +122,7 @@ export function cloneProject(project: ProjectDocumentV3): ProjectDocumentV3 {
     ...project,
     timeSignature: { ...project.timeSignature },
     loop: { ...project.loop },
+    sections: project.sections.map((section) => ({ ...section, instruments: [...section.instruments] })),
     tracks: project.tracks.map((track) => ({
       ...track,
       clips: track.clips.map((clip) => ({ ...clip, notes: clip.notes.map((note) => ({ ...note })) })),
@@ -176,6 +193,187 @@ export function randomizeNoteValues(
   });
 }
 
+type ArrangementStylePreset = {
+  color: string;
+  bpm: readonly [number, number];
+  scale: readonly number[];
+  density: number;
+  ensemble: readonly InstrumentId[];
+};
+
+const ARRANGEMENT_STYLE_PRESETS: Record<ArrangementStyleId, ArrangementStylePreset> = {
+  synthwave: { color: "#ff6c8f", bpm: [104, 124], scale: [0, 2, 3, 5, 7, 8, 10], density: .7, ensemble: ["pad", "bass", "drums", "electric", "lead"] },
+  lofi: { color: "#63d7ff", bpm: [72, 92], scale: [0, 3, 5, 7, 10], density: .52, ensemble: ["electric", "bass", "drums", "grand", "marimba"] },
+  cinematic: { color: "#b69cff", bpm: [80, 108], scale: [0, 2, 3, 5, 7, 8, 11], density: .46, ensemble: ["strings", "pad", "drums", "grand", "marimba"] },
+  guofeng: { color: "#e7bd62", bpm: [76, 112], scale: [0, 2, 5, 7, 9], density: .6, ensemble: ["guzheng", "erhu", "chinesePercussion", "pipa", "dizi"] },
+  funk: { color: "#9df564", bpm: [102, 124], scale: [0, 2, 3, 5, 7, 9, 10], density: .76, ensemble: ["organ", "bass", "drums", "electric", "lead"] },
+};
+
+const SECTION_LAYERS: Record<SongSectionRole, readonly number[]> = {
+  intro: [0, 3],
+  verse: [0, 1, 2],
+  prechorus: [0, 1, 2, 3],
+  chorus: [0, 1, 2, 3, 4],
+  bridge: [0, 3, 4],
+  finale: [0, 1, 2, 3, 4],
+};
+
+const SECTION_TEMPLATES: Record<number, ReadonlyArray<{ role: SongSectionRole; bars: number }>> = {
+  3: [{ role: "intro", bars: 4 }, { role: "chorus", bars: 8 }, { role: "finale", bars: 8 }],
+  4: [{ role: "intro", bars: 4 }, { role: "verse", bars: 8 }, { role: "chorus", bars: 8 }, { role: "finale", bars: 8 }],
+  5: [{ role: "intro", bars: 4 }, { role: "verse", bars: 8 }, { role: "chorus", bars: 8 }, { role: "bridge", bars: 4 }, { role: "finale", bars: 8 }],
+  6: [{ role: "intro", bars: 4 }, { role: "verse", bars: 8 }, { role: "prechorus", bars: 4 }, { role: "chorus", bars: 8 }, { role: "bridge", bars: 4 }, { role: "finale", bars: 8 }],
+};
+
+function randomIndex(random: () => number, length: number) {
+  return Math.min(length - 1, Math.max(0, Math.floor(random() * length)));
+}
+
+function sectionStyles(mode: ArrangementStyleMode, count: number, random: () => number) {
+  if (mode !== "mixed") return Array.from({ length: count }, () => mode);
+  const start = randomIndex(random, ARRANGEMENT_STYLE_IDS.length);
+  return Array.from({ length: count }, (_, index) => ARRANGEMENT_STYLE_IDS[(start + index) % ARRANGEMENT_STYLE_IDS.length]);
+}
+
+function noteRole(instrument: InstrumentId) {
+  if (instrument === "drums" || instrument === "chinesePercussion") return "drums" as const;
+  if (instrument === "bass") return "bass" as const;
+  if (["grand", "electric", "pad", "organ", "strings", "sheng"].includes(instrument)) return "harmony" as const;
+  if (["marimba", "guzheng", "pipa", "yangqin"].includes(instrument)) return "pluck" as const;
+  return "lead" as const;
+}
+
+function generateSectionNotes(
+  instrument: InstrumentId,
+  style: ArrangementStyleId,
+  lengthTicks: number,
+  root: number,
+  random: () => number,
+  idFactory: (prefix: string) => string,
+) {
+  const preset = ARRANGEMENT_STYLE_PRESETS[style];
+  const signature: TimeSignature = { numerator: 4, denominator: 4 };
+  const perBar = barTicks(signature);
+  const role = noteRole(instrument);
+  const notes: MidiNoteV3[] = [];
+  const progression = [0, 3, 4, 0];
+  const push = (pitch: number, tick: number, durationTicks: number, velocity: number) => {
+    if (tick >= lengthTicks) return;
+    notes.push({ id: idFactory("note"), pitch: clampMidi(pitch), tick: Math.max(0, Math.round(tick)), durationTicks: Math.max(1, Math.min(Math.round(durationTicks), lengthTicks - tick)), velocity: clampMidi(velocity) });
+  };
+  const scalePitch = (degree: number, octave = 0) => root + preset.scale[((degree % preset.scale.length) + preset.scale.length) % preset.scale.length] + octave * 12;
+
+  if (role === "drums") {
+    for (let bar = 0; bar * perBar < lengthTicks; bar += 1) {
+      const start = bar * perBar;
+      if (instrument === "chinesePercussion") {
+        [0, 2, 4, 6].forEach((eighth, index) => push([36, 48, 42, 45][(bar + index) % 4], start + eighth * STEP_TICKS * 2, STEP_TICKS, 84 + (index === 0 ? 28 : randomIndex(random, 20))));
+        continue;
+      }
+      const kickSteps = style === "funk" ? [0, 6, 8, 14] : style === "lofi" ? [0, 8] : style === "cinematic" ? [0, 12] : [0, 4, 8, 12];
+      const snareSteps = style === "cinematic" ? [8] : [4, 12];
+      kickSteps.forEach((step) => push(36, start + step * STEP_TICKS, STEP_TICKS, 96 + randomIndex(random, 24)));
+      snareSteps.forEach((step) => push(38, start + step * STEP_TICKS, STEP_TICKS, 92 + randomIndex(random, 22)));
+      const hatEvery = style === "lofi" || style === "cinematic" ? 4 : 2;
+      for (let step = 0; step < 16; step += hatEvery) {
+        const swing = (style === "lofi" || style === "funk") && step % 4 !== 0 ? Math.round(STEP_TICKS * .22) : 0;
+        push(step % 8 === 6 ? 46 : 42, start + step * STEP_TICKS + swing, STEP_TICKS, 58 + randomIndex(random, 30));
+      }
+    }
+  } else if (role === "bass") {
+    for (let bar = 0; bar * perBar < lengthTicks; bar += 1) {
+      const degree = progression[bar % progression.length];
+      const hits = style === "funk" ? [0, 3, 6, 10, 14] : style === "cinematic" ? [0] : [0, 4, 8, 12];
+      hits.forEach((step, index) => push(36 + scalePitch(degree + (index === hits.length - 1 ? 1 : 0)), bar * perBar + step * STEP_TICKS, style === "cinematic" ? perBar : STEP_TICKS * 3, 78 + randomIndex(random, 30)));
+    }
+  } else if (role === "harmony") {
+    const sustained = instrument === "pad" || instrument === "strings" || instrument === "sheng";
+    const barsPerChord = style === "cinematic" && sustained ? 2 : 1;
+    for (let bar = 0; bar * perBar < lengthTicks; bar += barsPerChord) {
+      const degree = progression[Math.floor(bar / barsPerChord) % progression.length];
+      const base = instrument === "grand" || instrument === "electric" ? 48 : 43;
+      const duration = Math.min(lengthTicks - bar * perBar, perBar * barsPerChord - (sustained ? STEP_TICKS / 2 : STEP_TICKS * 2));
+      [degree, degree + 2, degree + 4].forEach((chordDegree, index) => push(base + scalePitch(chordDegree), bar * perBar + (sustained ? 0 : index * Math.round(STEP_TICKS / 2)), duration, 58 + randomIndex(random, 28)));
+    }
+  } else {
+    const step = style === "synthwave" || style === "funk" ? STEP_TICKS : STEP_TICKS * 2;
+    const base = instrument === "dizi" || instrument === "suona" ? 72 : instrument === "erhu" ? 67 : 60;
+    const count = Math.ceil(lengthTicks / step);
+    for (let index = 0; index < count; index += 1) {
+      const tick = index * step + ((style === "lofi" || style === "funk") && index % 2 ? Math.round(step * .14) : 0);
+      if (role === "lead" && random() > preset.density) continue;
+      const bar = Math.floor(tick / perBar);
+      const degree = progression[bar % progression.length] + (role === "pluck" ? index % 5 : randomIndex(random, preset.scale.length));
+      const duration = role === "pluck" ? Math.round(step * .72) : Math.min(step * (random() > .78 ? 2 : 1), perBar);
+      push(base + scalePitch(degree), tick, duration, (role === "pluck" ? 66 : 72) + randomIndex(random, 36));
+    }
+  }
+
+  if (!notes.length) push(60 + root, 0, Math.min(perBar, lengthTicks), 88);
+  return notes.sort((a, b) => a.tick - b.tick || a.pitch - b.pitch);
+}
+
+export type GeneratedArrangement = {
+  bpm: number;
+  lengthBars: number;
+  sections: SongSectionV3[];
+  tracks: MidiTrackV3[];
+};
+
+export function generateStyledArrangement({
+  defaults,
+  sectionCount = 5,
+  style = "mixed",
+  random = Math.random,
+  idFactory = (prefix: string) => projectUid(prefix),
+}: {
+  defaults: InstrumentDefaults;
+  sectionCount?: number;
+  style?: ArrangementStyleMode;
+  random?: () => number;
+  idFactory?: (prefix: string) => string;
+}): GeneratedArrangement {
+  const count = Math.max(3, Math.min(6, Math.round(sectionCount)));
+  const templates = SECTION_TEMPLATES[count];
+  const styles = sectionStyles(style, count, random);
+  const signature: TimeSignature = { numerator: 4, denominator: 4 };
+  const perBar = barTicks(signature);
+  const root = [0, 2, 5, 7, 9][randomIndex(random, 5)];
+  let cursor = 0;
+  const sections = templates.map((template, index): SongSectionV3 => {
+    const sectionStyle = styles[index];
+    const preset = ARRANGEMENT_STYLE_PRESETS[sectionStyle];
+    const instruments = SECTION_LAYERS[template.role].map((layer) => preset.ensemble[layer]).filter((item): item is InstrumentId => Boolean(item));
+    const lengthTicks = template.bars * perBar;
+    const section = { id: idFactory("section"), role: template.role, style: sectionStyle, startTick: cursor, lengthTicks, color: preset.color, instruments };
+    cursor += lengthTicks;
+    return section;
+  });
+  const instruments = [...new Set(sections.flatMap((section) => section.instruments))];
+  let melodicChannel = 0;
+  const tracks = instruments.map((instrument, trackIndex): MidiTrackV3 => {
+    const preset = defaults[instrument];
+    const percussion = instrument === "drums" || instrument === "chinesePercussion";
+    while (melodicChannel === 9) melodicChannel += 1;
+    const channel = percussion ? 9 : melodicChannel++ % 16;
+    return {
+      id: idFactory("track"), name: preset.name.toUpperCase(), instrument, color: preset.color, program: preset.program, channel,
+      volume: instrument === "bass" ? 74 : percussion ? 80 : 70, pan: percussion || instrument === "bass" ? 0 : (trackIndex % 2 === 0 ? -14 : 14),
+      reverb: noteRole(instrument) === "harmony" ? 34 : 18, mute: false, solo: false, arm: trackIndex === 0,
+      clips: sections.filter((section) => section.instruments.includes(instrument)).map((section) => ({
+        id: idFactory("clip"), name: `${section.role.toUpperCase()} · ${section.style.toUpperCase()}`, startTick: section.startTick,
+        contentLengthTicks: section.lengthTicks, displayLengthTicks: section.lengthTicks, loopEnabled: false,
+        notes: generateSectionNotes(instrument, section.style, section.lengthTicks, root, random, idFactory),
+      })),
+    };
+  });
+  const selectedPreset = style === "mixed" ? null : ARRANGEMENT_STYLE_PRESETS[style];
+  const bpm = selectedPreset
+    ? Math.round(selectedPreset.bpm[0] + random() * (selectedPreset.bpm[1] - selectedPreset.bpm[0]))
+    : 104 + randomIndex(random, 15);
+  return { bpm, lengthBars: Math.ceil(cursor / perBar), sections, tracks };
+}
+
 export function createEmptyProject(tracks: MidiTrackV3[], name = "UNTITLED SESSION"): ProjectDocumentV3 {
   const signature: TimeSignature = { numerator: 4, denominator: 4 };
   const perBar = barTicks(signature);
@@ -189,6 +387,7 @@ export function createEmptyProject(tracks: MidiTrackV3[], name = "UNTITLED SESSI
     lengthBars: DEFAULT_SONG_BARS,
     masterVolume: 78,
     loop: { enabled: true, startTick: 0, endTick: perBar * 4 },
+    sections: [],
     tracks,
     updatedAt: Date.now(),
   };
@@ -239,6 +438,14 @@ export function splitClip(clip: MidiClipV3, songTick: number): [MidiClipV3, Midi
 
 function isInstrumentId(value: unknown): value is InstrumentId {
   return typeof value === "string" && (INSTRUMENT_IDS as readonly string[]).includes(value);
+}
+
+function isArrangementStyleId(value: unknown): value is ArrangementStyleId {
+  return typeof value === "string" && (ARRANGEMENT_STYLE_IDS as readonly string[]).includes(value);
+}
+
+function isSongSectionRole(value: unknown): value is SongSectionRole {
+  return typeof value === "string" && ["intro", "verse", "prechorus", "chorus", "bridge", "finale"].includes(value);
 }
 
 export function migrateProjectV2(input: LegacyProjectV2, defaults: InstrumentDefaults): ProjectDocumentV3 {
@@ -301,6 +508,16 @@ export function normalizeProjectV3(input: unknown, defaults: InstrumentDefaults)
     bpm: Math.max(40, Math.min(240, Number(raw.bpm) || 112)), timeSignature: signature, lengthBars: Math.max(DEFAULT_SONG_BARS, Math.round(raw.lengthBars || DEFAULT_SONG_BARS)),
     masterVolume: Number.isFinite(raw.masterVolume) ? Math.max(0, Math.min(100, Number(raw.masterVolume))) : 78,
     loop: { enabled: Boolean(raw.loop?.enabled), startTick: Math.max(0, Math.round(raw.loop?.startTick || 0)), endTick: Math.max(STEP_TICKS, Math.round(raw.loop?.endTick || barTicks(signature) * 4)) },
+    sections: (Array.isArray(raw.sections) ? raw.sections : []).slice(0, 32).map((candidate) => {
+      const section = candidate as SongSectionV3;
+      const style = isArrangementStyleId(section.style) ? section.style : "synthwave";
+      return {
+        id: section.id || projectUid("section"), role: isSongSectionRole(section.role) ? section.role : "verse", style,
+        startTick: Math.max(0, Math.round(section.startTick || 0)), lengthTicks: Math.max(STEP_TICKS, Math.round(section.lengthTicks || barTicks(signature) * 4)),
+        color: section.color || ARRANGEMENT_STYLE_PRESETS[style].color,
+        instruments: (Array.isArray(section.instruments) ? section.instruments : []).filter(isInstrumentId),
+      };
+    }),
     tracks, updatedAt: Number(raw.updatedAt) || Date.now(),
   };
   project.lengthBars = requiredSongBars(project, Math.max(projectContentEnd(project), project.loop.endTick));

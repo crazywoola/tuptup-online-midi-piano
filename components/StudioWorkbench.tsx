@@ -22,6 +22,7 @@ import {
   createClip,
   createEmptyProject,
   generateRandomNotes,
+  generateStyledArrangement,
   migrateProjectV2,
   normalizeProjectV3,
   projectContentEnd,
@@ -33,12 +34,15 @@ import {
   splitClip,
   tickToBarBeat,
   type GridValue,
+  type ArrangementStyleId,
+  type ArrangementStyleMode,
   type InstrumentDefaults,
   type LegacyTrackV2,
   type MidiClipV3,
   type MidiNoteV3,
   type MidiTrackV3,
   type ProjectDocumentV3,
+  type SongSectionRole,
 } from "@/lib/project";
 import { loadLastProjectDocument, saveProjectDocument } from "@/lib/project-store";
 import { makeProjectMidi, parseMidiFile } from "@/lib/midi";
@@ -66,7 +70,7 @@ const NOTE_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A"
 type ConnectionState = "idle" | "searching" | "connected" | "missing" | "blocked" | "error";
 type Locale = "zh" | "en";
 type DeviceMessageKind = "idle" | "searching" | "connected" | "missing" | "unsupported" | "failed";
-type ModalName = "new-track" | "audio" | "shortcuts" | "export" | "samples" | "sound-check" | null;
+type ModalName = "new-track" | "random-song" | "audio" | "shortcuts" | "export" | "samples" | "sound-check" | null;
 
 type Instrument = {
   id: InstrumentId;
@@ -93,7 +97,7 @@ const UI_TEXT = {
     project: "工程", projectName: "工程名称", projectActions: "工程操作", newProject: "新建", importMidi: "导入 MIDI", save: "保存", export: "导出", midiOnline: "MIDI 在线", connectDevice: "连接设备",
     language: "语言", switchLanguage: "切换到 English", guide: "说明书", openGuide: "打开功能说明书", transport: "传输控制", openLibrary: "打开音色库", undo: "撤销", redo: "重做", metronome: "节拍器", tempo: "速度", countIn: "预备拍", returnStart: "回到开头", pause: "暂停", play: "播放", stopRecording: "停止录音", record: "录音", loop: "循环", master: "主音量", audioSettings: "音频设置", openMixer: "打开混音器",
     browser: "浏览器", libraryTitle: "音色库", tones: "音色", samples: "采样", effects: "效果", sampleLibraryManaged: "采样库可在工程包中管理", effectsInChannel: "效果器位于右侧通道条", studioCollection: "录音室", chineseCollection: "国风采样", credits: "来源", fullSuite: "整套", tracks: "音轨", ready: "采样就绪", loading: "采样加载中", synthFallback: "合成回退", loadOnDemand: "云端高清", soundCheck: "音色检查", openSoundCheck: "打开全部乐器音色检查", previewSound: "试听", retrySample: "重试", checkAll: "检查全部 17 件乐器", checkingAll: "正在逐件检查…", soundCheckTitle: "让每件乐器都发出正确的声音", soundCheckHelp: "逐件下载并解码代表音符。完整检查约需 30–45 MB；未加载或网络失败时仍会立即使用合成音色。", sampleCheckComplete: (ready: number) => `音色检查完成 · ${ready}/17 采样就绪`, cachedSample: "已缓存", fallbackActive: "回退可用", sampleError: "需要重试",
-    arrangement: "编曲", arrangementTitle: "编曲时间线", selectTool: "选择工具", pencilTool: "铅笔工具", splitTool: "切割工具", grid: "网格", gridAccuracy: "网格精度", add: "添加", addInstrumentTrack: "添加乐器音轨", notes: "音符",
+    arrangement: "编曲", arrangementTitle: "编曲时间线", randomSong: "随机整曲", randomSongHint: "一次生成多个连续段落，并让每段拥有不同的风格、乐器组合与演奏角色", randomSongTitle: "生成一首多段落作品", randomSongHelp: "选择 3–6 个段落和整体方向。混合风格会让每段切换风格；单一风格仍会在前奏、主歌、副歌与桥段之间改变配器。", arrangementStyle: "风格方向", sectionCount: "段落数量", replaceArrangement: "生成会替换当前音轨与片段；可使用撤销恢复。", generateArrangement: "生成整曲", randomSongCreated: (count: number) => `已生成 ${count} 个段落 · 不同配器与风格 · 可撤销`, selectTool: "选择工具", pencilTool: "铅笔工具", splitTool: "切割工具", grid: "网格", gridAccuracy: "网格精度", add: "添加", addInstrumentTrack: "添加乐器音轨", notes: "音符",
     pianoRoll: "钢琴卷帘", quantize: "量化 1/16", humanize: "人性化", randomize: "随机灵感", randomizeHint: "为当前选择生成新的音高和力度；空片段会自动生成旋律", randomClipName: "随机灵感", randomIdeaCreated: "随机灵感已生成 · 可撤销", duplicate: "重复", delete: "删除", rollHelp: "钢琴卷帘，点击空白处添加音符", stepLabel: (step: number) => `第 ${step} 格`, stepInput: "步进输入", stepInputHint: "开启后，按下方键盘、电脑 A–K 或 MIDI 键盘，音符会写入播放头并自动前进", liveRecordHint: "实时演奏请先待录音轨，再按 R 或录音键", learnMore: "查看完整说明",
     liveInput: "实时输入", note: "音符", velocity: "力度", octave: "八度", sustain: "延音", sampleReady: "采样就绪", playToLoad: "演奏以加载", computerKeys: "电脑键 A–K", keyboardLabel: "共享 61 键演奏键盘",
     channelStrip: "通道条", trackMixer: "音轨混音", selectedTrack: "已选音轨", trackName: "音轨名称", instrument: "乐器", inserts: "插入效果", compressor: "压缩器", eq: "三段均衡", on: "开", emptySlot: "空插槽", emptySlotReady: "空插槽已就绪", sends: "发送", reverb: "混响", delay: "延迟", pan: "声像", mute: "静音", solo: "独奏", arm: "待录", deleteTrack: "删除当前音轨",
@@ -112,7 +116,7 @@ const UI_TEXT = {
     project: "Project", projectName: "Project name", projectActions: "Project actions", newProject: "New", importMidi: "Import MIDI", save: "Save", export: "Export", midiOnline: "MIDI Online", connectDevice: "Connect Device",
     language: "Language", switchLanguage: "切换到中文", guide: "Guide", openGuide: "Open the feature guide", transport: "Transport controls", openLibrary: "Open sound library", undo: "Undo", redo: "Redo", metronome: "Metronome", tempo: "Tempo", countIn: "Count-in", returnStart: "Return to start", pause: "Pause", play: "Play", stopRecording: "Stop recording", record: "Record", loop: "Loop", master: "Master", audioSettings: "Audio settings", openMixer: "Open mixer",
     browser: "Browser", libraryTitle: "Sound Library", tones: "Sounds", samples: "Samples", effects: "Effects", sampleLibraryManaged: "Manage the sample library in the project bundle", effectsInChannel: "Effects are available in the channel strip", studioCollection: "Studio", chineseCollection: "Chinese Samples", credits: "Credits", fullSuite: "Full Suite", tracks: "Tracks", ready: "Sample Ready", loading: "Loading Sample", synthFallback: "Synth Fallback", loadOnDemand: "Cloud HD", soundCheck: "Sound Check", openSoundCheck: "Open the all-instrument sound check", previewSound: "Preview", retrySample: "Retry", checkAll: "Check All 17 Instruments", checkingAll: "Checking every instrument…", soundCheckTitle: "Make sure every instrument sounds right", soundCheckHelp: "Downloads and decodes a representative note for every instrument. A full check uses about 30–45 MB; synthesis still responds instantly before samples load or when offline.", sampleCheckComplete: (ready: number) => `Sound check complete · ${ready}/17 samples ready`, cachedSample: "Cached", fallbackActive: "Fallback Ready", sampleError: "Retry Needed",
-    arrangement: "Arrangement", arrangementTitle: "Arrangement Timeline", selectTool: "Select tool", pencilTool: "Pencil tool", splitTool: "Split tool", grid: "Grid", gridAccuracy: "Grid resolution", add: "Add", addInstrumentTrack: "Add Instrument Track", notes: "Notes",
+    arrangement: "Arrangement", arrangementTitle: "Arrangement Timeline", randomSong: "Random Song", randomSongHint: "Generate several consecutive sections with distinct styles, instrument combinations, and musical roles", randomSongTitle: "Generate a Multi-section Song", randomSongHelp: "Choose 3–6 sections and a direction. Mixed Styles changes style from section to section; a focused style still changes the instrumentation between intro, verse, chorus, and bridge.", arrangementStyle: "Style Direction", sectionCount: "Number of Sections", replaceArrangement: "Generation replaces the current tracks and clips; Undo restores them.", generateArrangement: "Generate Song", randomSongCreated: (count: number) => `${count} sections generated · varied styles and instrumentation · undo available`, selectTool: "Select tool", pencilTool: "Pencil tool", splitTool: "Split tool", grid: "Grid", gridAccuracy: "Grid resolution", add: "Add", addInstrumentTrack: "Add Instrument Track", notes: "Notes",
     pianoRoll: "Piano Roll", quantize: "Quantize 1/16", humanize: "Humanize", randomize: "Random Idea", randomizeHint: "Generate new pitches and velocities for the selection; empty clips receive a melody", randomClipName: "RANDOM IDEA", randomIdeaCreated: "Random idea generated · undo available", duplicate: "Duplicate", delete: "Delete", rollHelp: "Piano roll; click empty space to add a note", stepLabel: (step: number) => `step ${step}`, stepInput: "Step Input", stepInputHint: "Turn it on, then play the keyboard below, A–K, or a MIDI keyboard. Notes land at the playhead and advance automatically.", liveRecordHint: "For live performance, arm a track and press R or Record", learnMore: "View Full Guide",
     liveInput: "Live Input", note: "Note", velocity: "Velocity", octave: "Octave", sustain: "Sustain", sampleReady: "Sample Ready", playToLoad: "Play to Load", computerKeys: "Computer Keys A–K", keyboardLabel: "Shared 61-key performance keyboard",
     channelStrip: "Channel Strip", trackMixer: "Track Mixer", selectedTrack: "Selected Track", trackName: "Track name", instrument: "Instrument", inserts: "Inserts", compressor: "Compressor", eq: "3-Band EQ", on: "On", emptySlot: "Empty Slot", emptySlotReady: "Empty slot is ready", sends: "Sends", reverb: "Reverb", delay: "Delay", pan: "Pan", mute: "Mute", solo: "Solo", arm: "Arm", deleteTrack: "Delete Current Track",
@@ -171,6 +175,36 @@ const INSTRUMENTS: Instrument[] = [
 
 const CORE_INSTRUMENTS = INSTRUMENTS.filter((instrument) => instrument.collection !== "chinese");
 const CHINESE_INSTRUMENTS = INSTRUMENTS.filter((instrument) => instrument.collection === "chinese");
+
+const RANDOM_STYLE_OPTIONS: ReadonlyArray<{ id: ArrangementStyleMode; nameZh: string; nameEn: string; detailZh: string; detailEn: string }> = [
+  { id: "mixed", nameZh: "混合风格", nameEn: "Mixed Styles", detailZh: "每段轮换电子、Lo-Fi、电影、国风与放克", detailEn: "Rotate synthwave, lo-fi, cinematic, guofeng, and funk" },
+  { id: "synthwave", nameZh: "霓虹电子", nameEn: "Synthwave", detailZh: "铺底、贝斯、鼓机、电钢与主音", detailEn: "Pads, bass, drums, electric keys, and lead" },
+  { id: "lofi", nameZh: "卧室 Lo-Fi", nameEn: "Lo-Fi", detailZh: "松弛电钢、低音、鼓组与马林巴", detailEn: "Loose electric keys, bass, drums, and marimba" },
+  { id: "cinematic", nameZh: "电影氛围", nameEn: "Cinematic", detailZh: "弦乐、长铺底、钢琴与稀疏打击", detailEn: "Strings, sustained pads, piano, and sparse percussion" },
+  { id: "guofeng", nameZh: "流光国风", nameEn: "Guofeng", detailZh: "古筝、二胡、琵琶、竹笛与锣鼓", detailEn: "Guzheng, erhu, pipa, dizi, and percussion" },
+  { id: "funk", nameZh: "弹性放克", nameEn: "Funk", detailZh: "风琴、贝斯、切分鼓组与合成主音", detailEn: "Organ, bass, syncopated drums, and synth lead" },
+];
+
+const SECTION_ROLES_BY_COUNT: Record<number, readonly SongSectionRole[]> = {
+  3: ["intro", "chorus", "finale"],
+  4: ["intro", "verse", "chorus", "finale"],
+  5: ["intro", "verse", "chorus", "bridge", "finale"],
+  6: ["intro", "verse", "prechorus", "chorus", "bridge", "finale"],
+};
+
+const SECTION_ROLE_NAMES: Record<SongSectionRole, { zh: string; en: string }> = {
+  intro: { zh: "前奏", en: "Intro" }, verse: { zh: "主歌", en: "Verse" }, prechorus: { zh: "推进", en: "Pre-chorus" },
+  chorus: { zh: "副歌", en: "Chorus" }, bridge: { zh: "桥段", en: "Bridge" }, finale: { zh: "终章", en: "Finale" },
+};
+
+function arrangementStyleName(style: ArrangementStyleId | "mixed", locale: Locale) {
+  const option = RANDOM_STYLE_OPTIONS.find((item) => item.id === style) ?? RANDOM_STYLE_OPTIONS[0];
+  return locale === "zh" ? option.nameZh : option.nameEn;
+}
+
+function sectionRoleName(role: SongSectionRole, locale: Locale) {
+  return SECTION_ROLE_NAMES[role][locale];
+}
 
 const LEGACY_INITIAL_TRACKS: LegacyTrackV2[] = [
   {
@@ -296,6 +330,8 @@ export default function StudioWorkbench() {
   const [onboardingSoundChosen, setOnboardingSoundChosen] = useState(false);
   const [sustain, setSustainState] = useState(false);
   const [modal, setModal] = useState<ModalName>(null);
+  const [randomSongStyle, setRandomSongStyle] = useState<ArrangementStyleMode>("mixed");
+  const [randomSongSectionCount, setRandomSongSectionCount] = useState(5);
   const [deviceDrawer, setDeviceDrawer] = useState(false);
   const [mobilePanel, setMobilePanel] = useState<"library" | "mixer" | null>(null);
   const [toast, setToast] = useState("");
@@ -469,6 +505,10 @@ export default function StudioWorkbench() {
     setHistory((items) => {
       if (!items.length) return items;
       const previous = items[items.length - 1];
+      setSelectedTrackId(previous.tracks[0]?.id ?? "");
+      setSelectedClipId(previous.tracks[0]?.clips[0]?.id ?? "");
+      setSelectedNoteId(null);
+      setSelectedNoteIds(new Set());
       setProject((current) => {
         setFuture((redoItems) => [cloneProject(current), ...redoItems].slice(0, 50));
         return cloneProject(previous);
@@ -481,6 +521,10 @@ export default function StudioWorkbench() {
     setFuture((items) => {
       if (!items.length) return items;
       const next = items[0];
+      setSelectedTrackId(next.tracks[0]?.id ?? "");
+      setSelectedClipId(next.tracks[0]?.clips[0]?.id ?? "");
+      setSelectedNoteId(null);
+      setSelectedNoteIds(new Set());
       setProject((current) => {
         setHistory((undoItems) => [...undoItems.slice(-49), cloneProject(current)]);
         return cloneProject(next);
@@ -1160,6 +1204,47 @@ export default function StudioWorkbench() {
     notify(t.randomIdeaCreated);
   }, [commitProject, commitTracks, grid, notify, project.timeSignature, selectedClip, selectedNoteId, selectedNoteIds, selectedTrack, stepLength, t]);
 
+  const generateRandomSong = useCallback(() => {
+    stopTransport();
+    const generated = generateStyledArrangement({
+      defaults: INSTRUMENT_DEFAULTS,
+      sectionCount: randomSongSectionCount,
+      style: randomSongStyle,
+    });
+    const localizedTracks = generated.tracks.map((track) => {
+      const instrument = instrumentById(track.instrument);
+      return {
+        ...track,
+        name: locale === "zh" ? instrument.nameZh : instrument.nameEn.toUpperCase(),
+        clips: track.clips.map((clip) => {
+          const section = generated.sections.find((item) => item.startTick === clip.startTick);
+          return section ? { ...clip, name: `${sectionRoleName(section.role, locale)} · ${arrangementStyleName(section.style, locale)}` } : clip;
+        }),
+      };
+    });
+    const firstTrack = localizedTracks[0];
+    currentTickRef.current = 0;
+    setCurrentTick(0);
+    commitProject((current) => ({
+      ...current,
+      bpm: generated.bpm,
+      timeSignature: { numerator: 4, denominator: 4 },
+      lengthBars: generated.lengthBars,
+      loop: { enabled: false, startTick: 0, endTick: barTicks({ numerator: 4, denominator: 4 }) * 4 },
+      sections: generated.sections,
+      tracks: localizedTracks,
+    }));
+    setSelectedTrackId(firstTrack?.id ?? "");
+    setSelectedClipId(firstTrack?.clips[0]?.id ?? "");
+    setSelectedNoteId(null);
+    setSelectedNoteIds(new Set());
+    setTool("select");
+    setMobileView("arrangement");
+    setModal(null);
+    if (firstTrack) void loadSampleInstrument(instrumentById(firstTrack.instrument), false);
+    notify(t.randomSongCreated(generated.sections.length));
+  }, [commitProject, loadSampleInstrument, locale, notify, randomSongSectionCount, randomSongStyle, stopTransport, t]);
+
   const newProject = useCallback(() => {
     stopTransport();
     const blankTracks = INITIAL_PROJECT.tracks.map((track) => ({ ...track, clips: [] }));
@@ -1690,6 +1775,7 @@ export default function StudioWorkbench() {
             <div className="section-bar">
               <div><span>{t.arrangement.toUpperCase()}</span><strong>{t.arrangementTitle}</strong></div>
               <div className="editing-tools">
+                <button className="random-song-button" onClick={() => setModal("random-song")} title={t.randomSongHint}>✦ {t.randomSong}</button>
                 <button className={tool === "select" ? "selected" : ""} onClick={() => setTool("select")} title={t.selectTool}>↖</button><button className={tool === "pencil" ? "selected" : ""} onClick={() => setTool("pencil")} title={t.pencilTool}>✎</button><button className={tool === "split" ? "selected" : ""} onClick={() => setTool("split")} title={t.splitTool}>／</button>
                 <span />
                 <label>{t.grid.toUpperCase()} <select aria-label={t.gridAccuracy} value={grid} onChange={(event) => setGrid(event.target.value as GridValue)}>{Object.keys(GRID_VALUES).map((value) => <option key={value}>{value}</option>)}</select></label>
@@ -1707,6 +1793,7 @@ export default function StudioWorkbench() {
               <div className="ruler-row">
                 <div className="track-label-header"><span>{t.tracks.toUpperCase()}</span><button onClick={() => setModal("new-track")}>＋ {t.add.toUpperCase()}</button></div>
                 <div className="ruler-grid" style={{ width: timelineWidth, backgroundSize: `${zoom / 4}px 100%` }} onPointerDown={setPlayhead}>
+                  {project.sections.map((section) => <div className="song-section-marker" key={section.id} title={`${sectionRoleName(section.role, locale)} · ${arrangementStyleName(section.style, locale)} · ${section.instruments.map((id) => instrumentName(instrumentById(id), locale)).join(" / ")}`} style={{ left: section.startTick / barTicks(project.timeSignature) * zoom, width: section.lengthTicks / barTicks(project.timeSignature) * zoom, borderColor: section.color, background: `color-mix(in srgb, ${section.color} 15%, #111318)` }}><strong>{sectionRoleName(section.role, locale)}</strong><small>{arrangementStyleName(section.style, locale)}</small></div>)}
                   {Array.from({ length: project.lengthBars }, (_, bar) => <span key={bar} style={{ left: bar * zoom, width: zoom }}>{bar + 1}</span>)}
                   <i className="loop-range" style={{ left: project.loop.startTick / barTicks(project.timeSignature) * zoom, width: (project.loop.endTick - project.loop.startTick) / barTicks(project.timeSignature) * zoom }} />
                 </div>
@@ -1833,12 +1920,20 @@ export default function StudioWorkbench() {
       </aside>
 
       {modal && <div className="modal-backdrop" role="presentation" onPointerDown={(event) => { if (event.target === event.currentTarget) setModal(null); }}>
-        <section className={`modal-card modal-${modal}`} role="dialog" aria-modal="true" aria-label={modal === "new-track" ? t.chooseInstrument : modal === "audio" ? t.audioRecordingSettings : modal === "shortcuts" ? t.keyCommands : modal === "export" ? t.takeYourMusic : modal === "sound-check" ? t.soundCheckTitle : t.sampleCredits}>
+        <section className={`modal-card modal-${modal}`} role="dialog" aria-modal="true" aria-label={modal === "new-track" ? t.chooseInstrument : modal === "random-song" ? t.randomSongTitle : modal === "audio" ? t.audioRecordingSettings : modal === "shortcuts" ? t.keyCommands : modal === "export" ? t.takeYourMusic : modal === "sound-check" ? t.soundCheckTitle : t.sampleCredits}>
           <button className="modal-close" onClick={() => setModal(null)} aria-label={t.closePanel}>×</button>
           {modal === "new-track" && <>
             <div className="modal-title"><span>{t.addTrack.toUpperCase()}</span><h2>{t.chooseInstrument}</h2><p>{t.sharedKeyboardHelp}</p></div>
             <button className="suite-action" onClick={addChineseSuite}><span><b>{t.chineseSuite}</b><small>{t.chineseSuiteList}</small></span><strong>＋ {t.addEightTracks}</strong></button>
             <div className="instrument-grid">{INSTRUMENTS.map((instrument) => <button key={instrument.id} onClick={() => addTrack(instrument.id)}><i style={{ background: instrument.color }}>{instrument.icon}</i><span><strong>{instrumentName(instrument, locale)}</strong><small>{instrumentFamily(instrument, locale)} · {t.sampleBadge.toUpperCase()}</small></span><b>＋</b></button>)}</div>
+          </>}
+          {modal === "random-song" && <>
+            <div className="modal-title"><span>{t.randomSong.toUpperCase()}</span><h2>{t.randomSongTitle}</h2><p>{t.randomSongHelp}</p></div>
+            <div className="random-song-field"><strong>{t.arrangementStyle}</strong><div className="random-style-grid">{RANDOM_STYLE_OPTIONS.map((option) => <button className={randomSongStyle === option.id ? "selected" : ""} aria-pressed={randomSongStyle === option.id} key={option.id} onClick={() => setRandomSongStyle(option.id)}><b>{locale === "zh" ? option.nameZh : option.nameEn}</b><small>{locale === "zh" ? option.detailZh : option.detailEn}</small></button>)}</div></div>
+            <div className="random-section-config"><strong>{t.sectionCount}</strong><div>{[3, 4, 5, 6].map((count) => <button className={randomSongSectionCount === count ? "selected" : ""} aria-pressed={randomSongSectionCount === count} key={count} onClick={() => setRandomSongSectionCount(count)}>{count}</button>)}</div></div>
+            <div className="random-section-outline">{SECTION_ROLES_BY_COUNT[randomSongSectionCount].map((role, index) => <span key={`${role}-${index}`}><b>{String(index + 1).padStart(2, "0")}</b>{sectionRoleName(role, locale)}</span>)}</div>
+            <p className="random-song-warning">{t.replaceArrangement}</p>
+            <button className="primary-action random-song-submit" onClick={generateRandomSong}>✦ {t.generateArrangement}</button>
           </>}
           {modal === "audio" && <>
             <div className="modal-title"><span>{t.settings.toUpperCase()}</span><h2>{t.audioRecordingSettings}</h2><p>{t.lowLatencyHelp}</p></div>

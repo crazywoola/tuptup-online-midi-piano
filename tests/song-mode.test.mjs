@@ -52,6 +52,63 @@ test("generates bounded random ideas and only randomizes targeted notes", () => 
   assert.equal(randomized[1], original[1]);
 });
 
+test("generates several styled sections with changing instrument combinations", () => {
+  let state = 17;
+  let nextId = 0;
+  const random = () => ((state = state * 48271 % 2147483647) - 1) / 2147483646;
+  const arrangement = projectLib.generateStyledArrangement({
+    defaults: DEFAULTS,
+    sectionCount: 5,
+    style: "mixed",
+    random,
+    idFactory: (prefix) => `${prefix}-${++nextId}`,
+  });
+
+  assert.equal(arrangement.sections.length, 5);
+  assert.equal(arrangement.lengthBars, 32);
+  assert.equal(new Set(arrangement.sections.map((section) => section.style)).size, 5);
+  assert.ok(new Set(arrangement.sections.map((section) => section.instruments.join(","))).size >= 4);
+  assert.ok(arrangement.tracks.length >= 8);
+
+  let expectedStart = 0;
+  for (const section of arrangement.sections) {
+    assert.equal(section.startTick, expectedStart);
+    assert.ok(section.instruments.length >= 2);
+    expectedStart += section.lengthTicks;
+    for (const instrument of section.instruments) {
+      const track = arrangement.tracks.find((candidate) => candidate.instrument === instrument);
+      assert.ok(track, `missing ${instrument} track`);
+      const clip = track.clips.find((candidate) => candidate.startTick === section.startTick);
+      assert.ok(clip, `missing ${instrument} clip for ${section.role}`);
+      assert.equal(clip.contentLengthTicks, section.lengthTicks);
+      assert.ok(clip.notes.length > 0);
+      assert.ok(clip.notes.every((note) => note.tick >= 0 && note.tick + note.durationTicks <= clip.contentLengthTicks));
+    }
+  }
+
+  const document = projectLib.createEmptyProject(arrangement.tracks, "GENERATED");
+  document.bpm = arrangement.bpm;
+  document.lengthBars = arrangement.lengthBars;
+  document.sections = arrangement.sections;
+  const normalized = projectLib.normalizeProjectV3(JSON.parse(JSON.stringify(document)), DEFAULTS);
+  assert.deepEqual(normalized.sections, arrangement.sections);
+});
+
+test("keeps a chosen style while varying the section instrumentation", () => {
+  let nextId = 0;
+  const arrangement = projectLib.generateStyledArrangement({
+    defaults: DEFAULTS,
+    sectionCount: 6,
+    style: "guofeng",
+    random: () => .25,
+    idFactory: (prefix) => `${prefix}-${++nextId}`,
+  });
+  assert.deepEqual(new Set(arrangement.sections.map((section) => section.style)), new Set(["guofeng"]));
+  assert.ok(new Set(arrangement.sections.map((section) => section.instruments.join(","))).size >= 4);
+  assert.ok(arrangement.tracks.every((item) => ["guzheng", "erhu", "pipa", "dizi", "chinesePercussion"].includes(item.instrument)));
+  assert.ok(arrangement.bpm >= 76 && arrangement.bpm <= 112);
+});
+
 test("snaps every straight and triplet grid and extends songs in four-bar blocks", () => {
   assert.equal(projectLib.snapTick(239, "1/8"), 240);
   assert.equal(projectLib.snapTick(151, "1/8T"), 160);

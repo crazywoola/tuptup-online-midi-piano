@@ -132,7 +132,7 @@ test("provides stable roll input from the shared 61-key keyboard", async () => {
   assert.doesNotMatch(styles, /\.piano-key\.black\.active\s*\{[^}]*transform/s);
 });
 
-test("ships an undoable random-idea action with readable control targets", async () => {
+test("ships clip ideas and undoable multi-section style generation with readable controls", async () => {
   const [page, project, styles, guide] = await Promise.all([
     readFile(new URL("../components/StudioWorkbench.tsx", import.meta.url), "utf8"),
     readFile(new URL("../lib/project.ts", import.meta.url), "utf8"),
@@ -142,9 +142,19 @@ test("ships an undoable random-idea action with readable control targets", async
   assert.match(page, /randomizeClip/);
   assert.match(page, /randomize-button/);
   assert.match(page, /随机灵感/);
+  assert.match(page, /generateRandomSong/);
+  assert.match(page, /random-song-button/);
+  assert.match(page, /随机整曲/);
+  assert.match(page, /randomSongSectionCount/);
   assert.match(project, /generateRandomNotes/);
   assert.match(project, /randomizeNoteValues/);
+  assert.match(project, /generateStyledArrangement/);
+  assert.match(project, /ARRANGEMENT_STYLE_IDS/);
   assert.match(styles, /min-height:\s*34px/);
   assert.match(styles, /musical surfaces retain their fixed geometry/i);
+  assert.match(styles, /song-section-marker/);
+  assert.match(styles, /random-style-grid/);
   assert.match(guide, /Random Idea/);
+  assert.match(guide, /RANDOM SONG/);
+  assert.match(guide, /Mixed, Synthwave, Lo-Fi, Cinematic, Guofeng, or Funk/);
 });
