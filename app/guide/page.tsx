@@ -68,7 +68,7 @@ const COPY = {
     songTitle: "Song Mode 与 Clip 操作",
     songIntro: "工程以 PPQ 480 的精确 tick 保存。默认 16 小节；录音、移动或导入超过结尾时，会按 4 小节自动延长，不再折回固定两小节循环。",
     songItems: [
-      ["RANDOM SONG", "多段落风格化编曲", "点编曲栏的“随机整曲”，选择 3–6 段与风格方向。混合模式会在段落间轮换五种风格；单一风格会保持调性方向，但前奏、主歌、副歌、桥段和终章使用不同乐器组合。生成会替换当前编曲，并可一次撤销。"],
+      ["RANDOM SONG", "多段落风格化编曲", "点编曲栏的“随机整曲”，选择 3–6 段与风格方向。混合模式会在段落间轮换五种风格；单一风格会保持调性方向，但前奏、主歌、副歌、桥段和终章使用不同乐器组合。生成后首段会自动打开在钢琴卷帘中，全部音符可立即详细编辑；整个生成动作可一次撤销。"],
       ["CLIP", "创建、移动与缩放", "铅笔点击空白音轨创建；拖动主体移动，拖左右边缘缩放。打开 Clip Loop 后，拉长右边缘会重复内容而不是复制源音符。工具栏可复制、切割和删除。"],
       ["LOOP RECORD", "独立循环与 Overdub", "顶部 Loop 输入设置开始/结束小节。循环只改变播放和录音范围；实时录音可以跨边界写入长音，并在每轮继续叠加。"],
       ["MIDI", "长歌曲往返", "导入保留绝对长度、重叠同音、Program、鼓通道、BPM 与拍号。导出会展开循环 Clip，并正确排序同一 tick 的 Note Off / Note On。"],
@@ -127,7 +127,7 @@ const COPY = {
     songTitle: "Song Mode and clip operations",
     songIntro: "Projects store musical time as exact PPQ-480 ticks. They start at 16 bars and extend in four-bar blocks when recording, moving, or importing past the end—nothing folds into a fixed two-bar loop.",
     songItems: [
-      ["RANDOM SONG", "Styled multi-section arrangements", "Open Random Song in the arrangement bar, choose 3–6 sections and a direction. Mixed mode rotates through five styles; focused modes keep a coherent direction while intro, verse, chorus, bridge, and finale use different instrument combinations. Generation replaces the arrangement as one undoable action."],
+      ["RANDOM SONG", "Styled multi-section arrangements", "Open Random Song in the arrangement bar, choose 3–6 sections and a direction. Mixed mode rotates through five styles; focused modes keep a coherent direction while intro, verse, chorus, bridge, and finale use different instrument combinations. The first generated Clip opens automatically in the Piano Roll with every note ready to edit, and the whole generation remains one undoable action."],
       ["CLIP", "Create, move, and resize", "Use Pencil on an empty lane; drag the body to move or either edge to resize. With Clip Loop enabled, extending the right edge repeats content without copying source notes. Duplicate, Split, and Delete live in the toolbar."],
       ["LOOP RECORD", "Independent loop and overdub", "The Loop bar fields set start/end bars. This changes transport and recording, not clip data. Live recording can cross the boundary and keeps overdubbing on later passes."],
       ["MIDI", "Long-song round trip", "Import keeps absolute length, overlapping same-pitch notes, Program, drum channels, BPM, and meter. Export expands looped clips and orders same-tick Note Off before Note On."],

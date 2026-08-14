@@ -127,7 +127,9 @@ test("provides stable roll input from the shared 61-key keyboard", async () => {
   assert.match(guide, /How does the keyboard add notes to the Piano Roll/);
   assert.match(guide, /How do I verify all 17 instruments/);
   assert.match(guide, /A W S E D F T G Y H U J K/);
-  assert.match(styles, /grid-template-rows: repeat\(61, 1fr\)/);
+  assert.match(styles, /grid-template-rows: repeat\(61, minmax\(0, 1fr\)\)/);
+  assert.match(styles, /\.roll-key-labels \{[^}]*min-height: 0;[^}]*height: 100%/s);
+  assert.match(styles, /\.roll-grid \{[^}]*min-height: 0;[^}]*height: 100%/s);
   assert.doesNotMatch(styles, /\.piano-key\.white\.active\s*\{[^}]*transform/s);
   assert.doesNotMatch(styles, /\.piano-key\.black\.active\s*\{[^}]*transform/s);
 });
@@ -146,6 +148,16 @@ test("ships clip ideas and undoable multi-section style generation with readable
   assert.match(page, /random-song-button/);
   assert.match(page, /随机整曲/);
   assert.match(page, /randomSongSectionCount/);
+  const randomSongHandler = page.slice(page.indexOf("const generateRandomSong"), page.indexOf("const newProject"));
+  assert.match(randomSongHandler, /const firstClip = firstTrack\?\.clips\[0\]/);
+  assert.match(randomSongHandler, /setSelectedNoteIds\(new Set\(firstClip\?\.notes\.map/);
+  assert.match(randomSongHandler, /setMobileView\("roll"\)/);
+  assert.match(page, /className="toolbar-group generation-tools"/);
+  assert.match(page, /className="toolbar-group mode-tools"/);
+  assert.match(page, /className="toolbar-group timeline-tools"/);
+  assert.match(page, /className="toolbar-group clip-tools"/);
+  assert.match(page, /className="toolbar-group note-process-tools"/);
+  assert.match(page, /className="toolbar-group note-edit-tools"/);
   assert.match(project, /generateRandomNotes/);
   assert.match(project, /randomizeNoteValues/);
   assert.match(project, /generateStyledArrangement/);

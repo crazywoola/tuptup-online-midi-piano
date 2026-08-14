@@ -399,6 +399,13 @@ export default function StudioWorkbench() {
     from: Math.max(0, rollViewport.left / rollCanvasWidth * (selectedClip?.contentLengthTicks ?? 0) - barTicks(project.timeSignature)),
     to: Math.min(selectedClip?.contentLengthTicks ?? 0, (rollViewport.left + rollViewport.width) / rollCanvasWidth * (selectedClip?.contentLengthTicks ?? 0) + barTicks(project.timeSignature)),
   };
+
+  useEffect(() => {
+    const viewport = rollBodyRef.current;
+    if (!viewport) return;
+    viewport.scrollLeft = 0;
+    setRollViewport({ left: 0, width: Math.max(0, viewport.clientWidth - 48) });
+  }, [selectedClipId]);
   const deviceMessage = deviceMessageKind === "searching" ? t.deviceSearching
     : deviceMessageKind === "connected" ? t.devicePorts(devicePortCount)
       : deviceMessageKind === "missing" ? t.deviceMissing
@@ -1234,12 +1241,14 @@ export default function StudioWorkbench() {
       sections: generated.sections,
       tracks: localizedTracks,
     }));
+    const firstClip = firstTrack?.clips[0];
+    const firstNote = firstClip?.notes[0];
     setSelectedTrackId(firstTrack?.id ?? "");
-    setSelectedClipId(firstTrack?.clips[0]?.id ?? "");
-    setSelectedNoteId(null);
-    setSelectedNoteIds(new Set());
+    setSelectedClipId(firstClip?.id ?? "");
+    setSelectedNoteId(firstNote?.id ?? null);
+    setSelectedNoteIds(new Set(firstClip?.notes.map((note) => note.id) ?? []));
     setTool("select");
-    setMobileView("arrangement");
+    setMobileView("roll");
     setModal(null);
     if (firstTrack) void loadSampleInstrument(instrumentById(firstTrack.instrument), false);
     notify(t.randomSongCreated(generated.sections.length));
@@ -1774,18 +1783,27 @@ export default function StudioWorkbench() {
           <div className="arrangement-panel">
             <div className="section-bar">
               <div><span>{t.arrangement.toUpperCase()}</span><strong>{t.arrangementTitle}</strong></div>
-              <div className="editing-tools">
-                <button className="random-song-button" onClick={() => setModal("random-song")} title={t.randomSongHint}>✦ {t.randomSong}</button>
-                <button className={tool === "select" ? "selected" : ""} onClick={() => setTool("select")} title={t.selectTool}>↖</button><button className={tool === "pencil" ? "selected" : ""} onClick={() => setTool("pencil")} title={t.pencilTool}>✎</button><button className={tool === "split" ? "selected" : ""} onClick={() => setTool("split")} title={t.splitTool}>／</button>
-                <span />
-                <label>{t.grid.toUpperCase()} <select aria-label={t.gridAccuracy} value={grid} onChange={(event) => setGrid(event.target.value as GridValue)}>{Object.keys(GRID_VALUES).map((value) => <option key={value}>{value}</option>)}</select></label>
-                <label>{locale === "zh" ? "拍号" : "METER"} <select aria-label={locale === "zh" ? "拍号" : "Meter"} value={`${project.timeSignature.numerator}/${project.timeSignature.denominator}`} onChange={(event) => { const [numerator, denominator] = event.target.value.split("/").map(Number); commitProject((current) => ({ ...current, timeSignature: { numerator, denominator: denominator as 2 | 4 | 8 | 16 } })); }}>{["3/4", "4/4", "5/4", "6/8", "7/8"].map((value) => <option key={value}>{value}</option>)}</select></label>
-                <label>LOOP <input className="loop-bar-input" type="number" min="1" max={project.lengthBars} value={Math.floor(project.loop.startTick / barTicks(project.timeSignature)) + 1} onChange={(event) => { const startTick = (Math.max(1, Number(event.target.value)) - 1) * barTicks(project.timeSignature); commitProject((current) => ({ ...current, loop: { ...current.loop, startTick: Math.min(startTick, current.loop.endTick - GRID_VALUES[grid]) } })); }} />–<input className="loop-bar-input" type="number" min="1" max={project.lengthBars} value={Math.ceil(project.loop.endTick / barTicks(project.timeSignature))} onChange={(event) => { const endTick = Math.max(1, Number(event.target.value)) * barTicks(project.timeSignature); commitProject((current) => ({ ...current, loop: { ...current.loop, endTick: Math.max(endTick, current.loop.startTick + GRID_VALUES[grid]) } })); }} /></label>
-                <label className="zoom-control">ZOOM <input type="range" min="32" max="160" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /></label>
-                <button className={followPlayback ? "selected" : ""} onClick={() => setFollowPlayback((value) => !value)} title={locale === "zh" ? "播放跟随" : "Follow playhead"}>⇥</button>
-                <button disabled={!selectedClip} onClick={duplicateSelectedClip} title={t.duplicate}>⧉</button>
-                <button disabled={!selectedClip} onClick={deleteSelectedClip} title={t.delete}>⌫</button>
-                <button onClick={() => setModal("shortcuts")} aria-label={t.keyCommands}>?</button>
+              <div className="editing-tools" aria-label={locale === "zh" ? "编曲工具" : "Arrangement tools"}>
+                <div className="toolbar-group generation-tools">
+                  <button className="random-song-button" onClick={() => setModal("random-song")} title={t.randomSongHint}>✦ {t.randomSong}</button>
+                </div>
+                <div className="toolbar-group mode-tools" role="group" aria-label={locale === "zh" ? "编辑工具" : "Edit tools"}>
+                  <button className={tool === "select" ? "selected" : ""} onClick={() => setTool("select")} title={t.selectTool}>↖</button>
+                  <button className={tool === "pencil" ? "selected" : ""} onClick={() => setTool("pencil")} title={t.pencilTool}>✎</button>
+                  <button className={tool === "split" ? "selected" : ""} onClick={() => setTool("split")} title={t.splitTool}>／</button>
+                </div>
+                <div className="toolbar-group timeline-tools">
+                  <label>{t.grid.toUpperCase()} <select aria-label={t.gridAccuracy} value={grid} onChange={(event) => setGrid(event.target.value as GridValue)}>{Object.keys(GRID_VALUES).map((value) => <option key={value}>{value}</option>)}</select></label>
+                  <label>{locale === "zh" ? "拍号" : "METER"} <select aria-label={locale === "zh" ? "拍号" : "Meter"} value={`${project.timeSignature.numerator}/${project.timeSignature.denominator}`} onChange={(event) => { const [numerator, denominator] = event.target.value.split("/").map(Number); commitProject((current) => ({ ...current, timeSignature: { numerator, denominator: denominator as 2 | 4 | 8 | 16 } })); }}>{["3/4", "4/4", "5/4", "6/8", "7/8"].map((value) => <option key={value}>{value}</option>)}</select></label>
+                  <label>LOOP <input className="loop-bar-input" type="number" min="1" max={project.lengthBars} value={Math.floor(project.loop.startTick / barTicks(project.timeSignature)) + 1} onChange={(event) => { const startTick = (Math.max(1, Number(event.target.value)) - 1) * barTicks(project.timeSignature); commitProject((current) => ({ ...current, loop: { ...current.loop, startTick: Math.min(startTick, current.loop.endTick - GRID_VALUES[grid]) } })); }} />–<input className="loop-bar-input" type="number" min="1" max={project.lengthBars} value={Math.ceil(project.loop.endTick / barTicks(project.timeSignature))} onChange={(event) => { const endTick = Math.max(1, Number(event.target.value)) * barTicks(project.timeSignature); commitProject((current) => ({ ...current, loop: { ...current.loop, endTick: Math.max(endTick, current.loop.startTick + GRID_VALUES[grid]) } })); }} /></label>
+                  <label className="zoom-control">ZOOM <input type="range" min="32" max="160" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /></label>
+                </div>
+                <div className="toolbar-group clip-tools" role="group" aria-label={locale === "zh" ? "片段工具" : "Clip tools"}>
+                  <button className={followPlayback ? "selected" : ""} onClick={() => setFollowPlayback((value) => !value)} title={locale === "zh" ? "播放跟随" : "Follow playhead"}>⇥</button>
+                  <button disabled={!selectedClip} onClick={duplicateSelectedClip} title={t.duplicate}>⧉</button>
+                  <button disabled={!selectedClip} onClick={deleteSelectedClip} title={t.delete}>⌫</button>
+                  <button onClick={() => setModal("shortcuts")} aria-label={t.keyCommands}>?</button>
+                </div>
               </div>
             </div>
             <div className="arrangement-scroll" ref={arrangementScrollRef}>
@@ -1829,14 +1847,20 @@ export default function StudioWorkbench() {
           <div className="piano-roll-panel">
             <div className="editor-toolbar">
               <div><span>{t.pianoRoll.toUpperCase()}</span><strong>{selectedClip ? `${selectedTrack?.name} · ${selectedClip.name}` : (locale === "zh" ? "演奏第一颗音符以创建片段" : "Play a note to create a clip")}</strong></div>
-              <div>
-                <button className="randomize-button" onClick={randomizeClip} title={t.randomizeHint}>✦ {t.randomize}</button>
-                <button onClick={() => editSelectedNotes("quantize")}>{t.quantize}</button>
-                <label className="quantize-strength"><span>{quantizeStrength}%</span><input type="range" min="0" max="100" value={quantizeStrength} onChange={(event) => setQuantizeStrength(Number(event.target.value))} /></label>
-                <button onClick={() => editSelectedNotes("humanize")}>{t.humanize}</button>
-                <button onClick={() => editSelectedNotes("duplicate")} disabled={!selectedNote}>{t.duplicate}</button>
-                <button onClick={() => editSelectedNotes("delete")} disabled={!selectedNote}>{t.delete}</button>
-                <button className={selectedClip?.loopEnabled ? "engaged" : ""} disabled={!selectedClip} onClick={() => selectedClip && commitTracks((current) => current.map((track) => track.id !== selectedTrackId ? track : { ...track, clips: track.clips.map((clip) => clip.id === selectedClip.id ? { ...clip, loopEnabled: !clip.loopEnabled } : clip) }))}>↻ CLIP</button>
+              <div className="editor-actions" aria-label={locale === "zh" ? "钢琴卷帘工具" : "Piano roll tools"}>
+                <div className="toolbar-group idea-tools">
+                  <button className="randomize-button" onClick={randomizeClip} title={t.randomizeHint}>✦ {t.randomize}</button>
+                </div>
+                <div className="toolbar-group note-process-tools">
+                  <button onClick={() => editSelectedNotes("quantize")}>{t.quantize}</button>
+                  <label className="quantize-strength"><span>{quantizeStrength}%</span><input type="range" min="0" max="100" value={quantizeStrength} onChange={(event) => setQuantizeStrength(Number(event.target.value))} /></label>
+                  <button onClick={() => editSelectedNotes("humanize")}>{t.humanize}</button>
+                </div>
+                <div className="toolbar-group note-edit-tools" role="group" aria-label={locale === "zh" ? "音符和片段操作" : "Note and clip actions"}>
+                  <button onClick={() => editSelectedNotes("duplicate")} disabled={!selectedNote}>{t.duplicate}</button>
+                  <button onClick={() => editSelectedNotes("delete")} disabled={!selectedNote}>{t.delete}</button>
+                  <button className={selectedClip?.loopEnabled ? "engaged" : ""} disabled={!selectedClip} onClick={() => selectedClip && commitTracks((current) => current.map((track) => track.id !== selectedTrackId ? track : { ...track, clips: track.clips.map((clip) => clip.id === selectedClip.id ? { ...clip, loopEnabled: !clip.loopEnabled } : clip) }))}>↻ CLIP</button>
+                </div>
                 <span className="velocity-chip">VEL {selectedNote?.velocity ?? "—"}</span>
               </div>
             </div>
